@@ -94,22 +94,6 @@ Important variables:
 - `MAX_UPLOAD_BYTES`
 - `SESSION_HTTPS_ONLY`
 
-## Git Workflow
-
-To stage, commit, and push in one command on Windows:
-
-```powershell
-cd D:\3fa
-.\publish.bat
-```
-
-If you want a custom commit message:
-
-```powershell
-cd D:\3fa
-.\git_publish.ps1 -Message "Describe your changes"
-```
-
 ## Project Structure
 
 ```text
