@@ -1,45 +1,33 @@
 # 3FA Authentication System
 
-A FastAPI-based multi-factor authentication web application that combines:
-
-- password authentication
-- TOTP authenticator verification
-- face registration and face-based verification
-- FIDO2 / WebAuthn security key support
-
-The project is designed as a portable authentication platform and strong portfolio project, with a modern UI, local-first setup, and practical security hardening.
+A secure FastAPI-based multi-factor authentication web application that combines password login with TOTP, face verification, and FIDO2/WebAuthn security keys.
 
 ## Overview
 
-This application lets users create accounts and enroll multiple authentication factors inside one workflow. It also includes an admin dashboard for user management, password reset, and operational control.
+This project is designed as a portable authentication platform and portfolio-ready security application. It allows users to register accounts, enroll multiple authentication factors, and complete login workflows with stronger identity verification than password-only systems.
 
-It is suitable as:
+It also includes an admin dashboard for user management, operational control, and account support tasks.
 
-- a security-focused FastAPI portfolio project
-- a prototype for secure login portals
-- a base for identity verification or attendance systems
-- a starting point for internal admin access platforms
+## Core Features
 
-## Features
-
-- User registration with multiple factors
-- Password-based login
-- TOTP setup using QR codes
-- Face capture, framing validation, and face verification
-- FIDO2 / WebAuthn security key enrollment
+- Password-based authentication
+- TOTP authenticator app setup and verification
+- Face registration, framing validation, and face-based login
+- FIDO2 / WebAuthn security key registration
 - Admin login and user management
-- Portable local startup with `run_portable.py`
+- Password visibility and password strength feedback
+- Improved UI across active authentication flows
+- Portable local startup script
 - Docker support
-- Shared front-end theme and improved UX
 
 ## Security Highlights
 
 - CSRF protection on state-changing routes
-- Trusted host restrictions
-- Safer session cookie defaults
+- Trusted host enforcement
 - Security headers
+- Safer session handling
 - Reduced CORS exposure
-- Upload-size and image-dimension limits
+- Request, upload, and image-size validation
 - Failed-login tracking and temporary lockout behavior
 - Encrypted handling for biometric-related stored data
 
@@ -53,9 +41,18 @@ It is suitable as:
 - FIDO2 / WebAuthn
 - Docker
 
+## Use Cases
+
+This project can be used as:
+
+- a secure authentication platform prototype
+- a cybersecurity or backend portfolio project
+- a base for identity verification systems
+- a starting point for attendance or admin access platforms
+
 ## Quick Start
 
-### Local
+### Local Setup
 
 ```powershell
 cd D:\3fa
@@ -67,7 +64,7 @@ Open:
 
 [http://localhost:8000](http://localhost:8000)
 
-Important for FIDO2/WebAuthn:
+Important for FIDO2 / WebAuthn:
 
 - use `http://localhost:8000`
 - avoid `127.0.0.1` if the browser rejects the relying-party domain
@@ -81,33 +78,6 @@ docker compose up --build
 Then open:
 
 [http://localhost:8000](http://localhost:8000)
-
-## Git Workflow
-
-To stage, commit, and push in one command on Windows:
-
-```powershell
-cd D:\3fa
-.\git_publish.ps1 -Message "Describe your changes"
-```
-
-If there are no new local changes, the script skips the commit step and only pushes.
-
-You can also run it without writing a commit message:
-
-```powershell
-cd D:\3fa
-.\git_publish.ps1
-```
-
-It will create a default message with the current date and time.
-
-For the shortest option, use:
-
-```powershell
-cd D:\3fa
-.\publish.bat
-```
 
 ## Configuration
 
@@ -124,17 +94,33 @@ Important variables:
 - `MAX_UPLOAD_BYTES`
 - `SESSION_HTTPS_ONLY`
 
+## Git Workflow
+
+To stage, commit, and push in one command on Windows:
+
+```powershell
+cd D:\3fa
+.\publish.bat
+```
+
+If you want a custom commit message:
+
+```powershell
+cd D:\3fa
+.\git_publish.ps1 -Message "Describe your changes"
+```
+
 ## Project Structure
 
 ```text
-app.py                  Main FastAPI app
+app.py                  Main FastAPI application
 config.py               Environment-based configuration
 data_manager.py         Database and persistence helpers
 face_handler.py         Face detection and verification logic
 templates/              Jinja templates
-static/                 Shared CSS and JS
+static/                 Shared CSS and JavaScript
 database/               Local SQLite database
-captured/               Local stored capture artifacts
+captured/               Local capture artifacts
 run_portable.py         Portable startup script
 ```
 
@@ -151,11 +137,16 @@ Admin credentials are controlled through environment variables:
 - `ADMIN_USERNAME`
 - `ADMIN_PASSWORD`
 
-## Notes
+## Production Notes
 
-- Local database and capture folders are excluded from Git with `.gitignore`
-- This project is best treated as a strong prototype or foundation, not a finished enterprise product
-- For production use, add HTTPS, PostgreSQL, centralized logging, proper secrets management, and automated tests
+This repository is a strong prototype and deployment base, but production use should still include:
+
+- HTTPS
+- PostgreSQL or another production database
+- centralized logging and monitoring
+- managed secrets
+- automated test coverage
+- backup and recovery planning
 
 ## License
 
