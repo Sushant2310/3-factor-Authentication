@@ -82,6 +82,17 @@ Then open:
 
 [http://localhost:8000](http://localhost:8000)
 
+## Git Workflow
+
+To stage, commit, and push in one command on Windows:
+
+```powershell
+cd D:\3fa
+.\git_publish.ps1 -Message "Describe your changes"
+```
+
+If there are no new local changes, the script skips the commit step and only pushes.
+
 ## Configuration
 
 Copy `.env.example` and set environment values as needed.
