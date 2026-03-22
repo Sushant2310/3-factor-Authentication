@@ -1,56 +1,95 @@
 # 3FA Authentication System
 
-FastAPI-based three-factor authentication demo with password, TOTP, face verification, and FIDO2/WebAuthn enrollment.
+A FastAPI-based multi-factor authentication web application that combines:
 
-## What is included
+- password authentication
+- TOTP authenticator verification
+- face registration and face-based verification
+- FIDO2 / WebAuthn security key support
 
-- OWASP-oriented baseline hardening:
-  - CSRF protection on state-changing routes
-  - restrictive security headers and trusted hosts
-  - stricter session cookie defaults
-  - reduced CORS surface
-  - upload-size and image-dimension limits
-  - failed-login tracking with temporary lockout
-- Portable startup:
-  - `run_portable.py` bootstraps local development
-  - `.env.example` for environment-based configuration
-  - Docker and Compose files for containerized runs
-- Refreshed UI across the active pages
+The project is designed as a portable authentication platform and strong portfolio project, with a modern UI, local-first setup, and practical security hardening.
 
-## Local run
+## Overview
 
-1. Create a virtual environment.
-2. Install dependencies:
+This application lets users create accounts and enroll multiple authentication factors inside one workflow. It also includes an admin dashboard for user management, password reset, and operational control.
+
+It is suitable as:
+
+- a security-focused FastAPI portfolio project
+- a prototype for secure login portals
+- a base for identity verification or attendance systems
+- a starting point for internal admin access platforms
+
+## Features
+
+- User registration with multiple factors
+- Password-based login
+- TOTP setup using QR codes
+- Face capture, framing validation, and face verification
+- FIDO2 / WebAuthn security key enrollment
+- Admin login and user management
+- Portable local startup with `run_portable.py`
+- Docker support
+- Shared front-end theme and improved UX
+
+## Security Highlights
+
+- CSRF protection on state-changing routes
+- Trusted host restrictions
+- Safer session cookie defaults
+- Security headers
+- Reduced CORS exposure
+- Upload-size and image-dimension limits
+- Failed-login tracking and temporary lockout behavior
+- Encrypted handling for biometric-related stored data
+
+## Tech Stack
+
+- FastAPI
+- Jinja2
+- SQLite
+- OpenCV
+- PyOTP
+- FIDO2 / WebAuthn
+- Docker
+
+## Quick Start
+
+### Local
 
 ```powershell
+cd D:\3fa
 python -m pip install -r requirements.txt
-```
-
-3. Optional: copy `.env.example` to `.env` and set your values.
-4. Start the app:
-
-```powershell
 python run_portable.py
 ```
 
-Open [http://localhost:8000](http://localhost:8000).
+Open:
+
+[http://localhost:8000](http://localhost:8000)
 
 Important for FIDO2/WebAuthn:
-- Use `http://localhost:8000`
-- Do not use `http://127.0.0.1:8000` for registration flows if the browser rejects the relying-party domain
 
-## Docker
+- use `http://localhost:8000`
+- avoid `127.0.0.1` if the browser rejects the relying-party domain
+
+### Docker
 
 ```powershell
 docker compose up --build
 ```
 
-Then open [http://localhost:8000](http://localhost:8000).
+Then open:
 
-## Key environment variables
+[http://localhost:8000](http://localhost:8000)
 
-- `SECRET_KEY`: session signing secret
-- `ENCRYPTION_KEY`: optional Fernet key for encrypted uploads
+## Configuration
+
+Copy `.env.example` and set environment values as needed.
+
+Important variables:
+
+- `SECRET_KEY`
+- `ENCRYPTION_KEY`
 - `ADMIN_USERNAME`
 - `ADMIN_PASSWORD`
 - `ALLOWED_HOSTS`
@@ -58,9 +97,39 @@ Then open [http://localhost:8000](http://localhost:8000).
 - `MAX_UPLOAD_BYTES`
 - `SESSION_HTTPS_ONLY`
 
-## Security notes
+## Project Structure
 
-- Set real secrets before exposing the app outside local development.
-- Use HTTPS in production.
-- Keep biometric and encryption key files secure.
-- Review admin credentials and allowed hosts before deployment.
+```text
+app.py                  Main FastAPI app
+config.py               Environment-based configuration
+data_manager.py         Database and persistence helpers
+face_handler.py         Face detection and verification logic
+templates/              Jinja templates
+static/                 Shared CSS and JS
+database/               Local SQLite database
+captured/               Local stored capture artifacts
+run_portable.py         Portable startup script
+```
+
+## Admin Access
+
+The admin dashboard supports:
+
+- viewing users
+- deleting users
+- resetting passwords
+
+Admin credentials are controlled through environment variables:
+
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+
+## Notes
+
+- Local database and capture folders are excluded from Git with `.gitignore`
+- This project is best treated as a strong prototype or foundation, not a finished enterprise product
+- For production use, add HTTPS, PostgreSQL, centralized logging, proper secrets management, and automated tests
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
