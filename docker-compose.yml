@@ -1,0 +1,18 @@
+services:
+  threefa:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      FASTAPI_ENV: development
+      HOST: 0.0.0.0
+      PORT: 8000
+      RELOAD: "false"
+      SECRET_KEY: replace-me-before-production
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: change-me-before-production
+      ALLOWED_HOSTS: localhost,127.0.0.1,0.0.0.0
+      CORS_ORIGINS: http://localhost:8000,http://127.0.0.1:8000
+    volumes:
+      - ./database:/app/database
+      - ./captured:/app/captured

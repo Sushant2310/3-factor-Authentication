@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="csrf-token" content="{{ csrf_token }}"/>
+  <title>TOTP Setup</title>
+  <link rel="stylesheet" href="/static/theme.css"/>
+</head>
+<body class="app-shell">
+  <main class="app-page">
+    <section class="app-grid">
+      <article class="hero-card">
+        <div class="hero-inner">
+          <div class="eyebrow">Authenticator App</div>
+          <h1 class="hero-title">Set up TOTP verification.</h1>
+          <p class="hero-copy">Scan the QR code with your authenticator app, then confirm the six-digit code to finish enrollment.</p>
+          <div class="feature-stack">
+            <div class="feature-chip">Compatible with Google Authenticator, Authy, and Microsoft Authenticator.</div>
+            <div class="feature-chip">Manual secret entry is available if scanning is inconvenient.</div>
+          </div>
+        </div>
+      </article>
+
+      <section class="panel-card">
+        <div class="panel-inner">
+          <div class="title-block">
+            <h2>TOTP Activation</h2>
+            <p>Use the QR code first. If scanning is unavailable, copy the secret manually.</p>
+          </div>
+
+          <div class="grid-two spacer-top">
+            <div class="qr-frame">
+              <img src="data:image/png;base64,{{ qr_image }}" alt="TOTP QR Code" />
+            </div>
+            <div class="soft-panel tile">
+              <div class="metric-label">Manual secret</div>
+              <div class="code-block">{{ secret }}</div>
+              <p class="muted spacer-top">Keep this secret private. Anyone with it can generate your login codes.</p>
+            </div>
+          </div>
+
+          <div id="message" class="status-banner spacer-top" style="display:none;"></div>
+
+          <form id="totpForm" onsubmit="return false;" class="spacer-top">
+            <div class="field">
+              <label for="code">6-digit code</label>
+              <input id="code" type="text" maxlength="6" inputmode="numeric" required />
+            </div>
+            <div class="button-row spacer-top">
+              <button id="verifyBtn" class="btn btn-primary" type="submit">Verify & Complete</button>
+              <a href="/dashboard" class="btn btn-soft">Back to Dashboard</a>
+            </div>
+          </form>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+  <script>
+    const msg = document.getElementById('message');
+
+    function showMessage(text, kind) {
+      msg.textContent = text;
+      msg.style.display = 'block';
+      msg.className = 'status-banner spacer-top ' + kind;
+    }
+
+    document.getElementById('verifyBtn').addEventListener('click', async () => {
+      const code = document.getElementById('code').value.trim();
+      if (!code || code.length !== 6 || isNaN(code)) {
+        showMessage('Please enter a valid 6-digit code.', 'error');
+        return;
+      }
+
+      try {
+        const res = await window.threeFA.jsonFetch('/totp_setup', { code });
+        const j = await res.json();
+        if (!res.ok || !j.success) {
+          showMessage(j.message || j.detail || 'Verification failed.', 'error');
+          return;
+        }
+        showMessage('TOTP verified. Redirecting...', 'success');
+        setTimeout(() => {
+          location.href = '/dashboard';
+        }, 900);
+      } catch (e) {
+        showMessage('Network error: ' + e.message, 'error');
+      }
+    });
+  </script>
+</body>
+</html>

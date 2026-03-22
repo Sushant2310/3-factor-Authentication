@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="csrf-token" content="{{ csrf_token }}"/>
+  <title>FIDO2 Security Key Registration</title>
+  <link rel="stylesheet" href="/static/theme.css"/>
+</head>
+<body class="app-shell">
+  <main class="app-page">
+    <section class="app-grid">
+      <article class="hero-card">
+        <div class="hero-inner">
+          <div class="eyebrow">Hardware Security Key</div>
+          <h1 class="hero-title">Register a FIDO2 authenticator.</h1>
+          <p class="hero-copy">Use a current browser on <strong>http://localhost</strong> or HTTPS, then insert or tap your security key when prompted.</p>
+          <div class="feature-stack">
+            <div class="feature-chip">Best phishing resistance of the available factors.</div>
+            <div class="feature-chip">Works with USB, NFC, and supported platform authenticators.</div>
+          </div>
+        </div>
+      </article>
+
+      <section class="panel-card">
+        <div class="panel-inner">
+          <div class="title-block">
+            <h2>FIDO2 Registration</h2>
+            <p>Click the button below, then complete the browser prompt with your security key.</p>
+          </div>
+          <div id="message" class="status-banner spacer-top warning">Ready to start.</div>
+          <div class="button-row spacer-top">
+            <button id="registerBtn" class="btn btn-primary" type="button">Register Security Key</button>
+            <a href="/dashboard" class="btn btn-soft">Back to Dashboard</a>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+  <script>
+    const msg = document.getElementById('message');
+    const options = {{ options|tojson|safe }};
+
+    function setMessage(text, kind = 'warning') {
+      msg.textContent = text;
+      msg.className = 'status-banner spacer-top ' + kind;
+    }
+
+    function toBase64Url(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      bytes.forEach((byte) => {
+        binary += String.fromCharCode(byte);
+      });
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    }
+
+    document.getElementById('registerBtn').addEventListener('click', async () => {
+      setMessage('Waiting for security key…', 'warning');
+
+      try {
+        if (!window.PublicKeyCredential || !navigator.credentials || !navigator.credentials.create) {
+          throw new Error('This browser or page context does not support WebAuthn. Use a current browser on http://localhost or https.');
+        }
+
+        options.publicKey.challenge = Uint8Array.from(atob(options.publicKey.challenge), c => c.charCodeAt(0));
+        options.publicKey.user.id = Uint8Array.from(atob(options.publicKey.user.id), c => c.charCodeAt(0));
+
+        const credential = await navigator.credentials.create({
+          publicKey: options.publicKey
+        });
+
+        if (!credential) {
+          setMessage('Registration cancelled.', 'error');
+          return;
+        }
+
+        const res = await window.threeFA.jsonFetch('/fido_register', {
+          id: toBase64Url(credential.rawId),
+          rawId: toBase64Url(credential.rawId),
+          type: credential.type,
+          response: {
+            attestationObject: toBase64Url(credential.response.attestationObject),
+            clientDataJSON: toBase64Url(credential.response.clientDataJSON)
+          },
+          clientExtensionResults: credential.getClientExtensionResults ? credential.getClientExtensionResults() : {}
+        });
+
+        const j = await res.json();
+        if (!res.ok || !j.success) {
+          setMessage(j.message || j.detail || 'Registration failed.', 'error');
+          return;
+        }
+
+        setMessage('Security key registered. Redirecting…', 'success');
+        setTimeout(() => {
+          location.href = '/dashboard';
+        }, 900);
+      } catch (e) {
+        setMessage('Error: ' + e.message, 'error');
+      }
+    });
+  </script>
+</body>
+</html>

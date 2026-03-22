@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local environment and secrets
+.env
+.env.local
+secret.key
+biometric.key
+encryption.key
+
+# App data
+database/
+captured/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build / coverage
+htmlcov/
+.coverage
+coverage.xml
+dist/
+build/

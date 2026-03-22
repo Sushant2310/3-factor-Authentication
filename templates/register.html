@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="csrf-token" content="{{ csrf_token }}"/>
+  <title>Register</title>
+  <link rel="stylesheet" href="/static/theme.css"/>
+  <style>
+    :root {
+      --card: rgba(255, 252, 247, 0.94);
+      --surface: #fffdf9;
+      --text: #1f2933;
+      --muted: #6b7280;
+      --border: rgba(125, 104, 77, 0.16);
+      --primary: #0f766e;
+      --primary-dark: #115e59;
+      --success: #15803d;
+      --warning: #d97706;
+      --danger: #b91c1c;
+      --danger-bg: #fee2e2;
+      --shadow: 0 28px 56px rgba(31, 41, 51, 0.14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.2), transparent 32%),
+        radial-gradient(circle at top right, rgba(234, 88, 12, 0.18), transparent 28%),
+        linear-gradient(145deg, #faf6ef 0%, #efe6d7 100%);
+      padding: 28px;
+    }
+    .layout {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 0.95fr 1.25fr;
+      gap: 24px;
+    }
+    .intro, .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    .intro {
+      padding: 38px;
+      background: linear-gradient(180deg, rgba(15, 118, 110, 0.98), rgba(17, 94, 89, 0.95));
+      color: #f8fafc;
+    }
+    .pill {
+      display: inline-flex;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.14);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .intro h1 {
+      margin: 20px 0 14px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.05;
+    }
+    .intro p {
+      margin: 0;
+      color: rgba(248, 250, 252, 0.86);
+      line-height: 1.65;
+    }
+    .check-grid {
+      margin-top: 30px;
+      display: grid;
+      gap: 14px;
+    }
+    .check-item {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .card {
+      padding: 34px;
+      background: var(--surface);
+    }
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 2rem;
+    }
+    .subcopy {
+      margin: 0 0 22px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    #message { min-height: 24px; margin-bottom: 8px; }
+    .alert {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--danger-bg);
+      color: var(--danger);
+      font-weight: 600;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .field { margin-top: 12px; }
+    .field.full { grid-column: 1 / -1; }
+    .field label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .field-note {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+    .field input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 1rem;
+      background: #fff;
+    }
+    .field input:focus {
+      outline: none;
+      border-color: rgba(15, 118, 110, 0.5);
+      box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+    }
+    .password-wrap { position: relative; }
+    .toggle-btn {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 0;
+      background: transparent;
+      color: var(--primary-dark);
+      font-weight: 700;
+      cursor: pointer;
+      padding: 6px 8px;
+      border-radius: 10px;
+    }
+    .toggle-btn:hover { background: rgba(15, 118, 110, 0.08); }
+    .strength-panel {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: #f7f6f2;
+      border: 1px solid rgba(125, 104, 77, 0.12);
+    }
+    .strength-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    .meter {
+      height: 12px;
+      border-radius: 999px;
+      background: #e7dfd2;
+      overflow: hidden;
+    }
+    .meter-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #dc2626, #f59e0b, #16a34a);
+      transition: width 0.25s ease;
+    }
+    .requirements {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
+    .requirements li {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid rgba(125, 104, 77, 0.1);
+    }
+    .requirements li.met {
+      color: var(--success);
+      border-color: rgba(21, 128, 61, 0.22);
+      background: rgba(21, 128, 61, 0.08);
+    }
+    .match-status {
+      margin-top: 10px;
+      font-weight: 700;
+      min-height: 20px;
+    }
+    .match-status.good { color: var(--success); }
+    .match-status.bad { color: var(--danger); }
+    .match-status.warn { color: var(--warning); }
+    .options {
+      margin-top: 20px;
+      padding: 18px;
+      border-radius: 22px;
+      background: #fbf8f2;
+      border: 1px solid rgba(125, 104, 77, 0.12);
+    }
+    .options p {
+      margin: 0 0 14px;
+      font-weight: 700;
+    }
+    .choice-grid { display: grid; gap: 12px; }
+    .choice {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: #fff;
+      border: 1px solid rgba(125, 104, 77, 0.12);
+      cursor: pointer;
+    }
+    .choice input {
+      margin-top: 2px;
+      accent-color: var(--primary);
+    }
+    .choice-title {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+    .choice-note {
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+    .button-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 18px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: #fff;
+      flex: 1 1 260px;
+    }
+    .btn-outline {
+      background: #f3ede3;
+      color: var(--text);
+      border: 1px solid var(--border);
+      flex: 1 1 180px;
+    }
+    @media (max-width: 920px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      body { padding: 16px; }
+      .card, .intro { padding: 24px 20px; border-radius: 24px; }
+      .grid, .requirements { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <section class="intro">
+      <div class="pill">Account Setup</div>
+      <h1>Create a stronger account from the start.</h1>
+      <p>Build your password with live feedback, confirm it before submitting, and choose the authentication factors you want to activate next.</p>
+      <div class="check-grid">
+        <div class="check-item">Live password strength meter with visual scoring.</div>
+        <div class="check-item">Show or hide both password fields while you verify what you typed.</div>
+        <div class="check-item">Interactive factor selection with a cleaner registration flow.</div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Create account</h2>
+      <p class="subcopy">Use at least two authentication methods and choose a password that will pass the policy before you submit.</p>
+      <div id="message">
+        {% if request.query_params.get('error') == 'username_password_required' %}
+          <div class="alert">Username and password required</div>
+        {% elif request.query_params.get('error') == 'password_too_short' %}
+          <div class="alert">Password must be at least 8 characters</div>
+        {% elif request.query_params.get('error') == 'username_too_short' %}
+          <div class="alert">Username must be at least 3 characters</div>
+        {% elif request.query_params.get('error') == 'passwords_dont_match' %}
+          <div class="alert">Passwords do not match</div>
+        {% elif request.query_params.get('error') == 'select_at_least_two_methods' %}
+          <div class="alert">Please select at least two authentication methods</div>
+        {% elif request.query_params.get('error') == 'username_exists' %}
+          <div class="alert">Username already exists</div>
+        {% elif request.query_params.get('error') == 'account_creation_failed' %}
+          <div class="alert">Account creation failed</div>
+        {% elif request.query_params.get('error') == 'invalid_username' %}
+          <div class="alert">Username can only contain letters, numbers, dots, hyphens, and underscores</div>
+        {% elif request.query_params.get('error') == 'password_complexity' %}
+          <div class="alert">Password must include uppercase, lowercase, and a number</div>
+        {% elif request.query_params.get('error') == 'invalid_input' %}
+          <div class="alert">Please review the entered details and try again</div>
+        {% endif %}
+      </div>
+      <form id="registerForm" method="post" action="/register">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <div class="grid">
+          <div class="field full">
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" autocomplete="username" placeholder="Choose a username" required />
+          </div>
+          <div class="field full">
+            <label for="password">Password</label>
+            <div class="field-note">Minimum 8 characters, with uppercase, lowercase, and a number.</div>
+            <div class="password-wrap">
+              <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" placeholder="Create a strong password" required />
+              <button class="toggle-btn" data-target="password" type="button">Show</button>
+            </div>
+            <div class="strength-panel">
+              <div class="strength-header">
+                <span>Password strength</span>
+                <span id="strengthLabel">Too weak</span>
+              </div>
+              <div class="meter" aria-hidden="true">
+                <div id="strengthBar" class="meter-fill"></div>
+              </div>
+              <ul class="requirements">
+                <li id="rule-length">At least 8 characters</li>
+                <li id="rule-upper">Uppercase letter</li>
+                <li id="rule-lower">Lowercase letter</li>
+                <li id="rule-number">Number</li>
+              </ul>
+            </div>
+          </div>
+          <div class="field full">
+            <label for="confirmPassword">Confirm password</label>
+            <div class="password-wrap">
+              <input id="confirmPassword" name="confirm_password" type="password" autocomplete="new-password" minlength="8" placeholder="Retype the password to confirm" required />
+              <button class="toggle-btn" data-target="confirmPassword" type="button">Show</button>
+            </div>
+            <div id="matchStatus" class="match-status warn">Retype your password to verify it matches.</div>
+          </div>
+        </div>
+        <div class="options">
+          <p>Select authentication methods</p>
+          <div class="choice-grid">
+            <label class="choice">
+              <input name="enable_totp" type="checkbox" />
+              <span><span class="choice-title">TOTP</span><span class="choice-note">Use an authenticator app for time-based codes.</span></span>
+            </label>
+            <label class="choice">
+              <input name="enable_face" type="checkbox" />
+              <span><span class="choice-title">Face recognition</span><span class="choice-note">Capture your face for biometric sign-in.</span></span>
+            </label>
+            <label class="choice">
+              <input name="enable_fido" type="checkbox" />
+              <span><span class="choice-title">FIDO2 security key</span><span class="choice-note">Register a hardware security key for stronger phishing resistance.</span></span>
+            </label>
+          </div>
+        </div>
+        <div class="button-row">
+          <button class="btn btn-primary" type="submit">Create account</button>
+          <button id="goLogin" class="btn btn-outline" type="button">Back to login</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  <script src="/static/app.js"></script>
+  <script>
+    const passwordInput = document.getElementById('password');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
+    const strengthBar = document.getElementById('strengthBar');
+    const strengthLabel = document.getElementById('strengthLabel');
+    const matchStatus = document.getElementById('matchStatus');
+    const rules = {
+      length: document.getElementById('rule-length'),
+      upper: document.getElementById('rule-upper'),
+      lower: document.getElementById('rule-lower'),
+      number: document.getElementById('rule-number')
+    };
+    function evaluatePassword(password) {
+      const checks = {
+        length: password.length >= 8,
+        upper: /[A-Z]/.test(password),
+        lower: /[a-z]/.test(password),
+        number: /\d/.test(password)
+      };
+      Object.entries(checks).forEach(([key, met]) => {
+        rules[key].classList.toggle('met', met);
+      });
+      const score = Object.values(checks).filter(Boolean).length;
+      const lengthBonus = password.length >= 12 ? 1 : 0;
+      const total = Math.min(score + lengthBonus, 5);
+      strengthBar.style.width = ((total / 5) * 100) + '%';
+      if (!password) {
+        strengthLabel.textContent = 'Too weak';
+        strengthLabel.style.color = 'var(--danger)';
+      } else if (total <= 2) {
+        strengthLabel.textContent = 'Weak';
+        strengthLabel.style.color = 'var(--danger)';
+      } else if (total === 3) {
+        strengthLabel.textContent = 'Medium';
+        strengthLabel.style.color = 'var(--warning)';
+      } else if (total === 4) {
+        strengthLabel.textContent = 'Strong';
+        strengthLabel.style.color = 'var(--primary)';
+      } else {
+        strengthLabel.textContent = 'Very strong';
+        strengthLabel.style.color = 'var(--success)';
+      }
+    }
+    function evaluateMatch() {
+      const password = passwordInput.value;
+      const confirm = confirmPasswordInput.value;
+      matchStatus.className = 'match-status';
+      if (!confirm) {
+        matchStatus.textContent = 'Retype your password to verify it matches.';
+        matchStatus.classList.add('warn');
+        return;
+      }
+      if (password === confirm) {
+        matchStatus.textContent = 'Passwords match.';
+        matchStatus.classList.add('good');
+      } else {
+        matchStatus.textContent = 'Passwords do not match yet.';
+        matchStatus.classList.add('bad');
+      }
+    }
+    document.querySelectorAll('.toggle-btn').forEach((button) => {
+      button.addEventListener('click', () => {
+        const input = document.getElementById(button.dataset.target);
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+        button.textContent = isPassword ? 'Hide' : 'Show';
+      });
+    });
+    passwordInput.addEventListener('input', () => {
+      evaluatePassword(passwordInput.value);
+      evaluateMatch();
+    });
+    confirmPasswordInput.addEventListener('input', evaluateMatch);
+    document.getElementById('goLogin').addEventListener('click', () => {
+      location.href = '/login';
+    });
+    evaluatePassword('');
+    evaluateMatch();
+  </script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="csrf-token" content="{{ csrf_token }}"/>
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="/static/theme.css"/>
+</head>
+<body class="app-shell">
+  <main class="app-page">
+    <section class="panel-card">
+      <div class="panel-inner">
+        <div class="topbar">
+          <div class="title-block">
+            <h1>Admin Dashboard</h1>
+            <p>Manage registered users and administrative actions from a single secured view.</p>
+          </div>
+          <form method="post" action="/admin/logout">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button class="btn btn-danger" type="submit">Logout</button>
+          </form>
+        </div>
+
+        <div class="grid-three spacer-top">
+          <div class="metric-card soft-panel">
+            <div class="metric-label">Users</div>
+            <div class="metric-value">{{ user_count }}</div>
+          </div>
+          <div class="metric-card soft-panel">
+            <div class="metric-label">Phone Verified</div>
+            <div class="metric-value">{{ phone_verified_count }}</div>
+          </div>
+          <div class="metric-card soft-panel">
+            <div class="metric-label">Admin Scope</div>
+            <div class="metric-value">Locked</div>
+          </div>
+        </div>
+
+        <div class="table-wrap spacer-top">
+          {% if request.query_params.get('reset_password') %}
+          <div class="status-banner spacer-top warning">
+            Temporary password for user {{ request.query_params.get('reset_user') }}:
+            <strong>{{ request.query_params.get('reset_password') }}</strong>
+          </div>
+          {% endif %}
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Phone Verified</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for user in users %}
+              <tr>
+                <td>{{ user['id'] }}</td>
+                <td>{{ user['username'] }}</td>
+                <td>
+                  <span class="pill-status {{ 'good' if user['phone_verified'] else 'bad' }}">
+                    {{ 'Yes' if user['phone_verified'] else 'No' }}
+                  </span>
+                </td>
+                <td>
+                  <div class="button-row">
+                    <form method="post" action="/admin/delete_user" onsubmit="return confirm('Delete user {{ user['username'] }}?')">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                      <input type="hidden" name="user_id" value="{{ user['id'] }}"/>
+                      <button type="submit" class="btn btn-danger">Delete</button>
+                    </form>
+                    <form method="post" action="/admin/reset_password">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                      <input type="hidden" name="user_id" value="{{ user['id'] }}"/>
+                      <button type="submit" class="btn btn-soft">Reset Password</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

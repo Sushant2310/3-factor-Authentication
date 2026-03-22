@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="csrf-token" content="{{ csrf_token }}"/>
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="/static/theme.css"/>
+</head>
+<body class="app-shell">
+  <main class="app-page">
+    <section class="app-grid">
+      <article class="hero-card">
+        <div class="hero-inner">
+          <div class="eyebrow">Authenticated</div>
+          <h1 class="hero-title">Welcome, {{ username }}</h1>
+          <p class="hero-copy">Your security dashboard is ready. Complete or revisit each factor from a single control panel.</p>
+          <div class="feature-stack">
+            <div class="feature-chip">Portable local-first setup with secure defaults.</div>
+            <div class="feature-chip">Face, TOTP, and FIDO2 enrollment in one flow.</div>
+            <div class="feature-chip">Stricter session, host, upload, and request protections.</div>
+          </div>
+        </div>
+      </article>
+
+      <section class="panel-card">
+        <div class="panel-inner">
+          <div class="topbar">
+            <div class="title-block">
+              <h2>Security Center</h2>
+              <p>Choose the factor you want to configure or verify next.</p>
+            </div>
+            <form method="post" action="/logout">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+              <button class="btn btn-soft" type="submit">Logout</button>
+            </form>
+          </div>
+
+          <div class="grid-three spacer-top">
+            <div class="option-card">
+              <div class="metric-label">Biometrics</div>
+              <div class="metric-value">Face</div>
+              <p class="muted">Register a full-face capture with live framing validation.</p>
+              <a href="/face_register" class="btn btn-primary spacer-top">Setup Face Registration</a>
+            </div>
+            <div class="option-card">
+              <div class="metric-label">Authenticator</div>
+              <div class="metric-value">TOTP</div>
+              <p class="muted">Scan a QR code and verify your first code inside the app.</p>
+              <a href="/totp_setup" class="btn btn-secondary spacer-top">Setup TOTP</a>
+            </div>
+            <div class="option-card">
+              <div class="metric-label">Hardware</div>
+              <div class="metric-value">FIDO2</div>
+              <p class="muted">Register a security key using WebAuthn on a supported browser.</p>
+              <a href="/fido_register" class="btn btn-soft spacer-top">Register Security Key</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

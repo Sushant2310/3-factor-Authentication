@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="csrf-token" content="{{ csrf_token }}"/>
+  <title>Face Registration</title>
+  <link rel="stylesheet" href="/static/theme.css"/>
+  <style>
+    .camera-frame { position: relative; }
+    .camera-frame video,
+    .camera-frame canvas {
+      width: 100%;
+      min-height: 420px;
+      object-fit: cover;
+      background: #0f172a;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .face-guide {
+      position: absolute;
+      inset: 50% auto auto 50%;
+      transform: translate(-50%, -50%);
+      width: 320px;
+      height: 380px;
+      border: 3px dashed rgba(255,255,255,0.88);
+      border-radius: 45% 45% 42% 42% / 38% 38% 48% 48%;
+      box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.24);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body class="app-shell">
+  <main class="app-page">
+    <section class="app-grid">
+      <article class="hero-card">
+        <div class="hero-inner">
+          <div class="eyebrow">Biometric Enrollment</div>
+          <h1 class="hero-title">Register a full face capture.</h1>
+          <p class="hero-copy">The app now validates that your face is centered, fully visible, and large enough before capture is enabled.</p>
+          <div class="feature-stack">
+            <div class="feature-chip">Use the guide so your forehead, chin, and both cheeks stay inside frame.</div>
+            <div class="feature-chip">If your webcam is inconvenient, switch to the phone QR flow or file upload fallback.</div>
+          </div>
+        </div>
+      </article>
+
+      <section class="panel-card">
+        <div class="panel-inner">
+          <div class="title-block">
+            <h2>Face Registration</h2>
+            <p>Wait until the app confirms that your full face is visible, then capture and save.</p>
+          </div>
+
+          <div id="status" class="status-banner warning spacer-top">Initializing camera…</div>
+
+          <div class="media-card spacer-top camera-frame">
+            <video id="video" autoplay playsinline></video>
+            <div class="face-guide"></div>
+            <canvas id="canvas" style="display:none"></canvas>
+          </div>
+
+          <div class="button-row spacer-top">
+            <button id="capture" class="btn btn-primary" disabled>Capture</button>
+            <button id="retry" class="btn btn-soft" style="display:none">Retry</button>
+            <button id="save" class="btn btn-secondary" style="display:none">Save</button>
+            <button id="finalize" class="btn btn-primary" style="display:none">Finalize</button>
+            <button id="phone" class="btn btn-soft" type="button">Register via Phone</button>
+          </div>
+
+          <div class="spacer-top">
+            <a href="/face_upload_fallback" class="btn-linklike">Can’t use webcam? Upload a face image instead.</a>
+          </div>
+
+          <div id="qrBox" class="soft-panel tile spacer-top" style="display:none;">
+            <div class="metric-label">Phone upload</div>
+            <div class="qr-frame spacer-top">
+              <img id="qrImg" alt="QR Code" />
+            </div>
+            <div class="button-row spacer-top">
+              <button id="hideQr" class="btn btn-soft" type="button">Hide QR</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+  <script>
+    const token = "{{ token }}";
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const capture = document.getElementById('capture');
+    const retry = document.getElementById('retry');
+    const saveBtn = document.getElementById('save');
+    const finalize = document.getElementById('finalize');
+    const phoneBtn = document.getElementById('phone');
+    const status = document.getElementById('status');
+    const qrBox = document.getElementById('qrBox');
+    const qrImg = document.getElementById('qrImg');
+
+    let stream;
+    let faceCheckInterval = null;
+    let faceCheckInFlight = false;
+
+    async function readJsonSafely(response) {
+      const text = await response.text();
+      try {
+        return text ? JSON.parse(text) : {};
+      } catch (error) {
+        return { detail: text || 'Unexpected server response.' };
+      }
+    }
+
+    function setStatus(message, kind = 'warning') {
+      status.textContent = message;
+      status.className = 'status-banner spacer-top ' + kind;
+    }
+
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 960 },
+            height: { ideal: 720 }
+          }
+        });
+        video.srcObject = stream;
+        await new Promise((resolve) => {
+          if (video.readyState >= 2 && video.videoWidth) {
+            resolve();
+            return;
+          }
+          video.onloadedmetadata = () => resolve();
+        });
+        capture.disabled = true;
+        setStatus('Checking that your full face is visible...', 'warning');
+        startFaceDetection();
+      } catch (e) {
+        setStatus('Cannot access camera. Check permissions or use the upload fallback.', 'error');
+        capture.disabled = true;
+      }
+    }
+
+    function stopCamera() {
+      if (faceCheckInterval) {
+        clearInterval(faceCheckInterval);
+        faceCheckInterval = null;
+      }
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      stream = null;
+    }
+
+    function startFaceDetection() {
+      capture.disabled = true;
+      if (faceCheckInterval) clearInterval(faceCheckInterval);
+
+      faceCheckInterval = setInterval(async () => {
+        if (!stream || video.style.display === 'none' || !video.videoWidth || faceCheckInFlight) return;
+        faceCheckInFlight = true;
+
+        const probe = document.createElement('canvas');
+        probe.width = video.videoWidth;
+        probe.height = video.videoHeight;
+        probe.getContext('2d').drawImage(video, 0, 0);
+
+        const formData = new FormData();
+        formData.append('image_data', probe.toDataURL('image/jpeg', 0.85));
+
+        try {
+          const res = await window.threeFA.formFetch('/check_face', formData);
+          const j = await readJsonSafely(res);
+          if (j.face_detected) {
+            capture.disabled = false;
+            setStatus(j.message || 'Full face detected. You can capture now.', 'success');
+          } else {
+            capture.disabled = true;
+            setStatus(j.message || 'Adjust your face so it is fully visible.', 'warning');
+          }
+        } catch (e) {
+          capture.disabled = true;
+          setStatus('Face check error: ' + e.message, 'error');
+        } finally {
+          faceCheckInFlight = false;
+        }
+      }, 1200);
+    }
+
+    capture.onclick = async () => {
+      setStatus('Please blink now for the liveness check...', 'warning');
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      const data = canvas.toDataURL('image/jpeg', 0.9);
+
+      try {
+        const formData = new FormData();
+        formData.append('image_data', data);
+        const res = await window.threeFA.formFetch('/check_liveness', formData);
+        const j = await readJsonSafely(res);
+        if (j.liveness) {
+          stopCamera();
+          video.style.display = 'none';
+          canvas.style.display = 'block';
+          capture.style.display = 'none';
+          retry.style.display = 'inline-flex';
+          saveBtn.style.display = 'inline-flex';
+          setStatus('Liveness confirmed. Review the frame, then save or retry.', 'success');
+        } else {
+          setStatus('Liveness failed: ' + (j.message || 'Try again.'), 'error');
+          await new Promise((resolve) => setTimeout(resolve, 1800));
+          retry.click();
+        }
+      } catch (e) {
+        setStatus('Liveness check error. Try again.', 'error');
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+        retry.click();
+      }
+    };
+
+    retry.onclick = () => {
+      canvas.style.display = 'none';
+      video.style.display = 'block';
+      capture.style.display = 'inline-flex';
+      retry.style.display = 'none';
+      saveBtn.style.display = 'none';
+      finalize.style.display = 'none';
+      setStatus('Position your face inside the guide and hold still.', 'warning');
+      startCamera();
+    };
+
+    saveBtn.onclick = async () => {
+      try {
+        const formData = new FormData();
+        formData.append('image_data', canvas.toDataURL('image/jpeg', 0.9));
+        const res = await window.threeFA.formFetch('/face_register', formData);
+        const j = await readJsonSafely(res);
+        if (!res.ok || !j.success) {
+          setStatus(j.detail || j.message || 'Unable to save the capture.', 'error');
+          return;
+        }
+        saveBtn.style.display = 'none';
+        finalize.style.display = 'inline-flex';
+        setStatus(j.message || 'Image saved. Finalize to complete registration.', 'success');
+      } catch (e) {
+        setStatus('Error saving capture: ' + e.message, 'error');
+      }
+    };
+
+    finalize.onclick = async () => {
+      try {
+        const res = await window.threeFA.jsonFetch('/face_finalize', {});
+        const j = await readJsonSafely(res);
+        if (!res.ok || !j.success) {
+          setStatus(j.detail || j.message || 'Error finalizing registration.', 'error');
+          return;
+        }
+        setStatus(j.message || 'Face registered successfully. Redirecting…', 'success');
+        setTimeout(() => {
+          window.location = '/dashboard';
+        }, 900);
+      } catch (e) {
+        setStatus('Error finalizing registration: ' + e.message, 'error');
+      }
+    };
+
+    phoneBtn.onclick = () => {
+      qrImg.src = 'data:image/png;base64,{{ qr_image }}';
+      qrBox.style.display = 'block';
+      pollStatus();
+    };
+
+    document.getElementById('hideQr').onclick = () => {
+      qrBox.style.display = 'none';
+    };
+
+    let pollInterval = null;
+    function pollStatus() {
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/qr_status/' + token, { credentials: 'same-origin' });
+          if (!res.ok) return;
+          const j = await res.json();
+          if (j.uploaded) {
+            setStatus('Phone upload complete. Finalizing registration…', 'success');
+            await window.threeFA.jsonFetch('/face_finalize', {});
+            window.location = '/dashboard';
+          } else if (j.scanned) {
+            setStatus('Phone connected. Upload the photo on your phone to finish registration.', 'warning');
+          }
+        } catch (e) {
+          console.error('poll error', e);
+        }
+      }, 1500);
+    }
+
+    startCamera();
+    window.addEventListener('beforeunload', stopCamera);
+  </script>
+</body>
+</html>
