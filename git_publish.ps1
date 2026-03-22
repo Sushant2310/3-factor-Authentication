@@ -27,17 +27,20 @@ if ($insideRepo -ne "true") {
 
 & $git add -A
 
-$status = (& $git status --short).Trim()
+$statusOutput = & $git status --short
+$status = if ($null -eq $statusOutput) { "" } else { ([string]$statusOutput).Trim() }
 
 if (-not $status) {
     Write-Host "No local changes to commit."
 } else {
-    if (-not $Message.Trim()) {
+    $commitMessage = if ($null -eq $Message) { "" } else { $Message.Trim() }
+
+    if (-not $commitMessage) {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm"
-        $Message = "Update project files ($timestamp)"
+        $commitMessage = "Update project files ($timestamp)"
     }
 
-    & $git commit -m $Message
+    & $git commit -m $commitMessage
 }
 
 & $git push $Remote $Branch
