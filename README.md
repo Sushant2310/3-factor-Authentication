@@ -93,6 +93,22 @@ cd D:\3fa
 
 If there are no new local changes, the script skips the commit step and only pushes.
 
+You can also run it without writing a commit message:
+
+```powershell
+cd D:\3fa
+.\git_publish.ps1
+```
+
+It will create a default message with the current date and time.
+
+For the shortest option, use:
+
+```powershell
+cd D:\3fa
+.\publish.bat
+```
+
 ## Configuration
 
 Copy `.env.example` and set environment values as needed.

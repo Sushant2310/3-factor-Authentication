@@ -33,7 +33,8 @@ if (-not $status) {
     Write-Host "No local changes to commit."
 } else {
     if (-not $Message.Trim()) {
-        $Message = "Update project files"
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm"
+        $Message = "Update project files ($timestamp)"
     }
 
     & $git commit -m $Message
