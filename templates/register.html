@@ -281,16 +281,16 @@
     <section class="intro">
       <div class="pill">Account Setup</div>
       <h1>Create a stronger account from the start.</h1>
-      <p>Build your password with live feedback, confirm it before submitting, and choose the authentication factors you want to activate next.</p>
+      <p>Build your password with live feedback, confirm it before submitting, and enable the two additional factors required to complete the three-step sign-in flow.</p>
       <div class="check-grid">
         <div class="check-item">Live password strength meter with visual scoring.</div>
         <div class="check-item">Show or hide both password fields while you verify what you typed.</div>
-        <div class="check-item">Interactive factor selection with a cleaner registration flow.</div>
+        <div class="check-item">Authenticator-code and security-key setup without extra capture steps.</div>
       </div>
     </section>
     <section class="card">
       <h2>Create account</h2>
-      <p class="subcopy">Use at least two authentication methods and choose a password that will pass the policy before you submit.</p>
+      <p class="subcopy">Password is required and the account setup also requires both TOTP and a FIDO2 security key.</p>
       <div id="message">
         {% if request.query_params.get('error') == 'username_password_required' %}
           <div class="alert">Username and password required</div>
@@ -300,8 +300,8 @@
           <div class="alert">Username must be at least 3 characters</div>
         {% elif request.query_params.get('error') == 'passwords_dont_match' %}
           <div class="alert">Passwords do not match</div>
-        {% elif request.query_params.get('error') == 'select_at_least_two_methods' %}
-          <div class="alert">Please select at least two authentication methods</div>
+        {% elif request.query_params.get('error') == 'select_required_methods' %}
+          <div class="alert">Enable both TOTP and a FIDO2 security key to continue</div>
         {% elif request.query_params.get('error') == 'username_exists' %}
           <div class="alert">Username already exists</div>
         {% elif request.query_params.get('error') == 'account_creation_failed' %}
@@ -354,18 +354,14 @@
           </div>
         </div>
         <div class="options">
-          <p>Select authentication methods</p>
+          <p>Required authentication methods</p>
           <div class="choice-grid">
             <label class="choice">
-              <input name="enable_totp" type="checkbox" />
+              <input name="enable_totp" type="checkbox" checked />
               <span><span class="choice-title">TOTP</span><span class="choice-note">Use an authenticator app for time-based codes.</span></span>
             </label>
             <label class="choice">
-              <input name="enable_face" type="checkbox" />
-              <span><span class="choice-title">Face recognition</span><span class="choice-note">Capture your face for biometric sign-in.</span></span>
-            </label>
-            <label class="choice">
-              <input name="enable_fido" type="checkbox" />
+              <input name="enable_fido" type="checkbox" checked />
               <span><span class="choice-title">FIDO2 security key</span><span class="choice-note">Register a hardware security key for stronger phishing resistance.</span></span>
             </label>
           </div>
@@ -444,6 +440,11 @@
         const isPassword = input.type === 'password';
         input.type = isPassword ? 'text' : 'password';
         button.textContent = isPassword ? 'Hide' : 'Show';
+      });
+    });
+    document.querySelectorAll('input[name="enable_totp"], input[name="enable_fido"]').forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        checkbox.checked = true;
       });
     });
     passwordInput.addEventListener('input', () => {

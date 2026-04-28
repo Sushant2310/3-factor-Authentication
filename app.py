@@ -1,39 +1,32 @@
 """
-FastAPI-based 3FA (Three-Factor Authentication) System
-A modern, high-performance authentication system with face recognition.
+FastAPI-based 3FA (Three-Factor Authentication) System.
 """
 
 import os
 import secrets
-import uuid
 import logging
 import base64
 import json
-from datetime import timedelta, datetime
 from contextlib import asynccontextmanager
-from urllib.parse import urlparse
 
-from fastapi import FastAPI, Request, Response, HTTPException, Depends, Form, UploadFile, File
+from fastapi import FastAPI, Request, HTTPException, Depends, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
-from typing import Dict, Any, Optional, List, Tuple
-import numpy as np
-from PIL import Image
+from typing import Dict, Any
 import pyotp
 import qrcode
 from fido2 import cbor
 from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
 from fido2.server import Fido2Server
 from io import BytesIO
-from starlette.middleware.sessions import SessionMiddleware
+from cryptography.fernet import Fernet, InvalidToken
 
 
 from data_manager import *
-from face_handler import *
 from utils import *
 from config import config
 from exceptions import *
@@ -49,22 +42,11 @@ class RegisterRequest(BaseModel):
     username: str
     password: str
     enable_totp: bool = False
-    enable_face: bool = False
     enable_fido: bool = False
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Check face recognition availability
-try:
-    from face_handler import _load_face_model
-    _load_face_model()  # Try to load the model
-    FACE_AVAILABLE = True
-    logger.info("Face recognition is available")
-except Exception as e:
-    FACE_AVAILABLE = False
-    logger.warning(f"Face recognition not available: {e}")
 
 # Get configuration
 config_name = os.environ.get('FASTAPI_ENV') or 'default'
@@ -72,13 +54,8 @@ cfg = config[config_name]
 cfg.init_app(None)
 
 # Global variables
-REGISTER_TOKENS = {}
 ADMIN_USERNAME = cfg.ADMIN_USERNAME
 ADMIN_PASSWORD = cfg.ADMIN_PASSWORD
-CAPTURE_DIR = cfg.CAPTURE_DIR
-OTP_TTL = cfg.OTP_TTL
-
-os.makedirs(CAPTURE_DIR, exist_ok=True)
 
 # Lifespan context manager for startup/shutdown events
 @asynccontextmanager
@@ -92,20 +69,12 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title=cfg.APP_NAME,
-    description="Modern three-factor authentication with face recognition",
+    description="Modern three-factor authentication with password, TOTP, and FIDO2",
     version="2.0.0",
     lifespan=lifespan
 )
 
 # Add middleware
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=cfg.SECRET_KEY,
-    session_cookie=cfg.SESSION_COOKIE_NAME,
-    same_site=cfg.SESSION_SAME_SITE,
-    https_only=cfg.SESSION_HTTPS_ONLY,
-    max_age=cfg.SESSION_MAX_AGE,
-)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cfg.CORS_ORIGINS,
@@ -114,6 +83,44 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-CSRF-Token"],
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=cfg.ALLOWED_HOSTS)
+
+
+@app.middleware("http")
+async def encrypted_session_middleware(request: Request, call_next):
+    cookie_value = request.cookies.get(cfg.SESSION_COOKIE_NAME)
+    session_data = {}
+
+    if cookie_value:
+        try:
+            decrypted = Fernet(cfg.SESSION_ENCRYPTION_KEY).decrypt(cookie_value.encode("ascii"))
+            session_data = json.loads(decrypted.decode("utf-8"))
+        except (InvalidToken, ValueError, json.JSONDecodeError, UnicodeDecodeError):
+            session_data = {}
+
+    request.scope["session"] = session_data
+    response = await call_next(request)
+
+    if request.session:
+        encrypted = Fernet(cfg.SESSION_ENCRYPTION_KEY).encrypt(
+            json.dumps(request.session, separators=(",", ":")).encode("utf-8")
+        ).decode("ascii")
+        response.set_cookie(
+            cfg.SESSION_COOKIE_NAME,
+            encrypted,
+            max_age=cfg.SESSION_MAX_AGE,
+            httponly=True,
+            secure=cfg.SESSION_HTTPS_ONLY,
+            samesite=cfg.SESSION_SAME_SITE,
+        )
+    elif cookie_value:
+        response.delete_cookie(
+            cfg.SESSION_COOKIE_NAME,
+            httponly=True,
+            secure=cfg.SESSION_HTTPS_ONLY,
+            samesite=cfg.SESSION_SAME_SITE,
+        )
+
+    return response
 
 
 def template_context(request: Request) -> Dict[str, Any]:
@@ -140,6 +147,32 @@ def get_current_admin(request: Request):
         raise HTTPException(status_code=403, detail="Admin access required")
     return True
 
+
+def get_post_auth_redirect(request: Request) -> str:
+    auth_methods = set(request.session.get("auth_methods", []))
+    return "/auth/success" if len(auth_methods) >= 3 else "/dashboard"
+
+
+def mark_auth_method(request: Request, method: str):
+    current_methods = set(request.session.get("auth_methods", []))
+    current_methods.add(method)
+    request.session["auth_methods"] = sorted(current_methods)
+
+
+def get_auth_progress(request: Request, username: str) -> Dict[str, Any]:
+    auth_methods = set(request.session.get("auth_methods", []))
+    user = get_user_by_username(username)
+    has_totp = bool(user and get_totp_secret(username))
+    has_fido = bool(user and get_fido_credentials(username))
+
+    return {
+        "methods": sorted(auth_methods),
+        "count": len(auth_methods),
+        "is_complete": len(auth_methods) >= 3,
+        "has_totp": has_totp,
+        "has_fido": has_fido,
+    }
+
 # FIDO2 server setup
 def get_fido_server(request: Request):
     host = request.headers.get("host", "").split(":")[0]
@@ -162,29 +195,6 @@ def as_bool(value):
     if value is None:
         return False
     return str(value).strip().lower() in {"1", "true", "on", "yes"}
-
-
-def decode_image_data(image_data: str) -> np.ndarray:
-    """Decode a base64 image payload into an RGB numpy array."""
-    if not image_data:
-        raise ValueError("No image data received")
-
-    encoded = image_data.split(",", 1)[1] if "," in image_data else image_data
-    try:
-        decoded = base64.b64decode(encoded)
-    except Exception as exc:
-        raise ValueError("Invalid image encoding received") from exc
-
-    try:
-        image = Image.open(BytesIO(decoded)).convert("RGB")
-    except Exception as exc:
-        raise ValueError("Captured frame could not be read. Hold still and try again.") from exc
-
-    if image.width > cfg.MAX_IMAGE_DIMENSION or image.height > cfg.MAX_IMAGE_DIMENSION:
-        raise ValueError("Image is too large. Use a lower-resolution capture.")
-
-    return np.array(image)
-
 
 def get_or_create_csrf_token(request: Request) -> str:
     token = request.session.get("csrf_token")
@@ -257,13 +267,13 @@ async def security_middleware(request: Request, call_next):
 async def root(request: Request):
     """Root route: redirect to login or dashboard if logged in."""
     if request.session.get("username"):
-        return RedirectResponse(url="/dashboard", status_code=302)
+        return RedirectResponse(url=get_post_auth_redirect(request), status_code=302)
     return RedirectResponse(url="/login", status_code=302)
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "app": cfg.APP_NAME, "face_available": FACE_AVAILABLE}
+    return {"status": "ok", "app": cfg.APP_NAME}
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -320,6 +330,7 @@ async def login(request: Request, csrf: None = Depends(verify_csrf)):
         request.session["csrf_token"] = secrets.token_urlsafe(32)
         request.session["username"] = username
         request.session["user_id"] = user_id
+        mark_auth_method(request, "password")
         log_audit_event(
             user_id,
             "login_success",
@@ -329,7 +340,7 @@ async def login(request: Request, csrf: None = Depends(verify_csrf)):
             success=True,
         )
 
-        return RedirectResponse(url="/dashboard", status_code=302)
+        return RedirectResponse(url=get_post_auth_redirect(request), status_code=302)
 
     except HTTPException:
         # Redirect back to login with error
@@ -354,7 +365,6 @@ async def register(request: Request, csrf: None = Depends(verify_csrf)):
         password = data.get("password")
         confirm_password = data.get("confirm_password")
         enable_totp = data.get("enable_totp", False)
-        enable_face = data.get("enable_face", False)
         enable_fido = data.get("enable_fido", False)
     except:
         # Fallback to form data
@@ -363,11 +373,9 @@ async def register(request: Request, csrf: None = Depends(verify_csrf)):
         password = form_data.get("password")
         confirm_password = form_data.get("confirm_password")
         enable_totp = form_data.get("enable_totp", False)
-        enable_face = form_data.get("enable_face", False)
         enable_fido = form_data.get("enable_fido", False)
 
     enable_totp = as_bool(enable_totp)
-    enable_face = as_bool(enable_face)
     enable_fido = as_bool(enable_fido)
 
     username = (username or "").strip()
@@ -398,9 +406,8 @@ async def register(request: Request, csrf: None = Depends(verify_csrf)):
         )
 
     # Enforce at least 2 methods
-    methods_selected = sum([enable_totp, enable_face, enable_fido])
-    if methods_selected < 2:
-        return RedirectResponse(url="/register?error=select_at_least_two_methods", status_code=302)
+    if not enable_totp or not enable_fido:
+        return RedirectResponse(url="/register?error=select_required_methods", status_code=302)
 
     # Check if user exists
     try:
@@ -426,11 +433,10 @@ async def register(request: Request, csrf: None = Depends(verify_csrf)):
     request.session["csrf_token"] = secrets.token_urlsafe(32)
     request.session["username"] = username
     request.session["user_id"] = uid
+    mark_auth_method(request, "password")
 
     # Decide next step
-    if enable_face:
-        next_url = "/face_register"
-    elif enable_totp:
+    if enable_totp:
         next_url = "/totp_setup"
     elif enable_fido:
         next_url = "/fido_register"
@@ -442,7 +448,24 @@ async def register(request: Request, csrf: None = Depends(verify_csrf)):
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, username: str = Depends(get_current_user)):
     """Dashboard page."""
-    return templates.TemplateResponse("dashboard.html", {"request": request, "username": username})
+    auth_progress = get_auth_progress(request, username)
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "username": username,
+        "auth_progress": auth_progress,
+    })
+
+
+@app.get("/auth/success", response_class=HTMLResponse)
+async def auth_success_page(request: Request, username: str = Depends(get_current_user)):
+    auth_progress = get_auth_progress(request, username)
+    if not auth_progress["is_complete"]:
+        return RedirectResponse(url="/dashboard", status_code=302)
+    return templates.TemplateResponse("auth_success.html", {
+        "request": request,
+        "username": username,
+        "auth_progress": auth_progress,
+    })
 
 @app.post("/logout")
 async def logout(request: Request, csrf: None = Depends(verify_csrf)):
@@ -459,12 +482,10 @@ async def totp_setup_page(request: Request, username: str = Depends(get_current_
     conn.close()
 
     totp_secret = row['totp_secret'] if row else None
+    totp_secret = get_totp_secret(username) if row and row['totp_secret'] else None
     if not totp_secret:
         totp_secret = pyotp.random_base32()
-        conn = get_db()
-        conn.execute('UPDATE users SET totp_secret = ? WHERE username = ?', (totp_secret, username))
-        conn.commit()
-        conn.close()
+        set_totp_secret(username, totp_secret)
 
     # Generate QR code
     totp = pyotp.TOTP(totp_secret)
@@ -501,22 +522,23 @@ async def totp_setup_verify(
         raise HTTPException(status_code=400, detail="Invalid OTP code")
 
     # Get TOTP secret from DB
-    conn = get_db()
-    cursor = conn.execute('SELECT totp_secret FROM users WHERE username = ?', (username,))
-    row = cursor.fetchone()
-    conn.close()
-
-    if not row or not row['totp_secret']:
+    totp_secret = get_totp_secret(username)
+    if not totp_secret:
         raise HTTPException(status_code=400, detail="TOTP not initialized")
 
     # Verify code
-    totp = pyotp.TOTP(row['totp_secret'])
+    totp = pyotp.TOTP(totp_secret)
     if not totp.verify(code):
         raise HTTPException(status_code=401, detail="Invalid OTP code")
 
     # Mark TOTP as verified
     request.session["totp_verified"] = True
-    return {"success": True, "message": "TOTP verified"}
+    mark_auth_method(request, "totp")
+    return {
+        "success": True,
+        "message": "TOTP verified",
+        "redirect": get_post_auth_redirect(request),
+    }
 
 @app.post("/totp_verify")
 async def totp_verify(
@@ -530,295 +552,23 @@ async def totp_verify(
         raise HTTPException(status_code=400, detail="Invalid OTP code")
 
     # Get TOTP secret from DB
-    conn = get_db()
-    cursor = conn.execute('SELECT totp_secret FROM users WHERE username = ?', (username,))
-    row = cursor.fetchone()
-    conn.close()
-
-    if not row or not row['totp_secret']:
+    totp_secret = get_totp_secret(username)
+    if not totp_secret:
         raise HTTPException(status_code=400, detail="TOTP not initialized")
 
     # Verify code
-    totp = pyotp.TOTP(row['totp_secret'])
+    totp = pyotp.TOTP(totp_secret)
     if not totp.verify(code):
         raise HTTPException(status_code=401, detail="Invalid OTP code")
 
     # Mark TOTP as verified
     request.session["totp_verified"] = True
-    return {"success": True, "message": "TOTP verified"}
-
-@app.get("/face_register", response_class=HTMLResponse)
-async def face_register_page(request: Request, username: str = Depends(get_current_user)):
-    """Face registration page."""
-    token = str(uuid.uuid4())
-    otp = "{:06d}".format(secrets.randbelow(10**6))
-    REGISTER_TOKENS[token] = {
-        "username": username,
-        "otp": otp,
-        "expires": datetime.utcnow() + OTP_TTL,
-        "scanned": False
-    }
-    qr_url = f"/face_upload/{token}"
-    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(f"{request.base_url}{qr_url}")
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    buf = BytesIO()
-    img.save(buf, format="PNG")
-    qr_b64 = base64.b64encode(buf.getvalue()).decode()
-
-    return templates.TemplateResponse("face_register.html", {
-        "request": request,
-        "qr_url": qr_url,
-        "token": token,
-        "qr_image": qr_b64
-    })
-
-@app.post("/face_register")
-async def face_register(
-    request: Request,
-    image_data: str = Form(...),
-    username: str = Depends(get_current_user),
-    csrf: None = Depends(verify_csrf)
-):
-    """Handle face registration."""
-    if not image_data:
-        raise HTTPException(status_code=400, detail="No image data received")
-
-    header, b64 = image_data.split(",", 1) if "," in image_data else ("", image_data)
-    img = Image.open(BytesIO(base64.b64decode(b64))).convert("RGB")
-    arr = np.array(img)
-
-    # Liveness check
-    is_live, msg = detect_liveness(arr)
-    if not is_live:
-        raise HTTPException(status_code=400, detail=msg)
-
-    # Save encrypted image
-    from utils import get_encryption_key
-    from cryptography.fernet import Fernet
-    key = get_encryption_key()
-    fernet = Fernet(key)
-    buf = BytesIO()
-    img.save(buf, format="JPEG", quality=95)
-    encrypted_data = fernet.encrypt(buf.getvalue())
-    path = os.path.join(CAPTURE_DIR, f"{username}.jpg")
-    with open(path, 'wb') as f:
-        f.write(encrypted_data)
-
-    return {"success": True, "message": "Image saved after liveness check"}
-
-@app.get("/qr_status/{token}")
-async def qr_status(token: str):
-    """Check QR code status."""
-    info = REGISTER_TOKENS.get(token)
-    if not info:
-        raise HTTPException(status_code=404, detail="Invalid token")
-    if info["expires"] < datetime.utcnow():
-        REGISTER_TOKENS.pop(token, None)
-        raise HTTPException(status_code=404, detail="Token expired")
-
+    mark_auth_method(request, "totp")
     return {
-        "exists": True,
-        "scanned": bool(info.get("scanned", False)),
-        "uploaded": bool(info.get("image_saved", False)),
-        "otp": info.get("otp") if info.get("scanned") else None,
-        "expires": info.get("expires").isoformat()
+        "success": True,
+        "message": "TOTP verified",
+        "redirect": get_post_auth_redirect(request),
     }
-
-@app.get("/face_auth", response_class=HTMLResponse)
-async def face_auth_page(request: Request, username: str = Depends(get_current_user)):
-    """Face authentication page."""
-    return templates.TemplateResponse("face_auth.html", {"request": request})
-
-@app.post("/verify_face")
-async def verify_face_endpoint(
-    request: Request,
-    username: str = Depends(get_current_user),
-    csrf: None = Depends(verify_csrf)
-):
-    """Verify face."""
-    if not FACE_AVAILABLE:
-        raise HTTPException(status_code=503, detail="Face recognition is not available on this system")
-
-    try:
-        data = await request.json()
-        image_data = data.get("image_data") or data.get("image")
-    except Exception:
-        form_data = await request.form()
-        image_data = form_data.get("image_data") or form_data.get("image")
-
-    if not image_data:
-        raise HTTPException(status_code=400, detail="No image data received")
-
-    image_array = decode_image_data(image_data)
-
-    if verify_face(username, image_array):
-        add_login_time(username)
-        return {"success": True, "message": "Face verified successfully"}
-    else:
-        raise HTTPException(status_code=401, detail="Face not matched. Please try again.")
-
-@app.post("/check_face")
-async def check_face(request: Request, csrf: None = Depends(verify_csrf)):
-    """Check if face is present in image."""
-    try:
-        data = await request.json()
-        image_data = data.get("image_data") or data.get("image")
-    except Exception:
-        form_data = await request.form()
-        image_data = form_data.get("image_data") or form_data.get("image")
-
-    if not image_data:
-        return {"face_detected": False, "faces_found": 0, "message": "no image"}
-
-    try:
-        arr = decode_image_data(image_data)
-    except ValueError as exc:
-        return {"face_detected": False, "faces_found": 0, "message": str(exc)}
-
-    boxes = detect_faces(arr)
-    faces_found = len(boxes)
-
-    if faces_found == 0:
-        return {"face_detected": False, "faces_found": 0, "message": "No face detected"}
-    elif faces_found > 1:
-        return {"face_detected": False, "faces_found": faces_found, "message": "Multiple faces detected"}
-    else:
-        top, right, bottom, left = boxes[0]
-        box = [int(top), int(right), int(bottom), int(left)]
-        framing_ok, framing_message = validate_face_framing(boxes[0], arr.shape)
-        if not framing_ok:
-            return {
-                "face_detected": False,
-                "faces_found": 1,
-                "box": box,
-                "message": framing_message
-            }
-
-        return {
-            "face_detected": True,
-            "faces_found": 1,
-            "box": box,
-            "message": "Full face detected. You can capture now."
-        }
-
-@app.post("/check_liveness")
-async def check_liveness_endpoint(request: Request, csrf: None = Depends(verify_csrf)):
-    """Check liveness of face in image."""
-    try:
-        data = await request.json()
-        image_data = data.get("image_data")
-    except:
-        # Fallback to form data
-        form_data = await request.form()
-        image_data = form_data.get("image_data")
-
-    if not image_data:
-        return {"liveness": False, "message": "No image data received"}
-
-    try:
-        arr = decode_image_data(image_data)
-    except ValueError as exc:
-        return {"liveness": False, "message": str(exc)}
-    is_live, msg = detect_liveness(arr)
-    return {"liveness": is_live, "message": msg}
-
-@app.post("/face_finalize")
-async def face_finalize(
-    request: Request,
-    username: str = Depends(get_current_user),
-    csrf: None = Depends(verify_csrf)
-):
-    """Finalize face registration."""
-    if get_phone_verified(username):
-        if get_face_encoding(username) is None:
-            raise HTTPException(status_code=400, detail="Phone upload is not complete yet")
-        for token, info in list(REGISTER_TOKENS.items()):
-            if info.get("username") == username:
-                REGISTER_TOKENS.pop(token, None)
-        return {"success": True, "message": "Registered via phone/QR"}
-
-    path = os.path.join(CAPTURE_DIR, f"{username}.jpg")
-    if not os.path.exists(path):
-        raise HTTPException(status_code=400, detail="No saved capture found")
-
-    try:
-        from utils import load_encrypted_file
-        decrypted_data = load_encrypted_file(path)
-        img = Image.open(BytesIO(decrypted_data)).convert("RGB")
-        arr = np.array(img)
-        encode_face(username, arr)
-        return {"success": True, "message": "Face registered successfully"}
-    except HTTPException:
-        raise
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        logger.exception("Face finalization failed")
-        raise HTTPException(status_code=500, detail=f"Face finalization failed: {exc}")
-
-@app.get("/face_upload/{token}", response_class=HTMLResponse)
-async def face_upload_page(token: str, request: Request):
-    """Face upload page for mobile devices."""
-    info = REGISTER_TOKENS.get(token)
-    if not info:
-        return templates.TemplateResponse("face_upload.html", {
-            "request": request,
-            "token": token,
-            "error": "Invalid or expired token"
-        })
-
-    username = info["username"]
-
-    if request.method == "POST":
-        # This would be handled by POST endpoint
-        pass
-    else:
-        # GET: mark as scanned
-        if not info.get("scanned"):
-            info["scanned"] = True
-        return templates.TemplateResponse("face_upload.html", {
-            "request": request,
-            "token": token,
-            "otp": info.get("otp")
-        })
-
-@app.post("/face_upload/{token}")
-async def face_upload(
-    token: str,
-    request: Request,
-    image: UploadFile = File(...),
-    csrf: None = Depends(verify_csrf)
-):
-    """Handle face upload from mobile."""
-    info = REGISTER_TOKENS.get(token)
-    if not info:
-        raise HTTPException(status_code=404, detail="Invalid token")
-
-    username = info["username"]
-
-    if not image:
-        raise HTTPException(status_code=400, detail="No file uploaded")
-
-    image.file.seek(0, os.SEEK_END)
-    upload_size = image.file.tell()
-    image.file.seek(0)
-    if upload_size > cfg.MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="Uploaded file is too large")
-
-    try:
-        img = Image.open(image.file).convert("RGB")
-        arr = np.array(img)
-        encode_face(username, arr)
-    except Exception as exc:
-        logger.exception("encode_face on uploaded image failed")
-        raise HTTPException(status_code=400, detail=f"Face upload failed: {exc}")
-
-    info["image_saved"] = True
-    info["scanned"] = True
-    set_phone_verified(username, True)
-    return {"success": True, "otp": info["otp"]}
 
 @app.get("/fido_register", response_class=HTMLResponse)
 async def fido_register_page(request: Request, username: str = Depends(get_current_user)):
@@ -910,16 +660,15 @@ async def fido_register(
         "sign_count": auth_data.counter
     }
 
-    conn = get_db()
-    conn.execute(
-        'UPDATE users SET fido_credentials = ? WHERE username = ?',
-        (json.dumps(credential_data), username)
-    )
-    conn.commit()
-    conn.close()
+    set_fido_credentials(username, json.dumps(credential_data))
 
     request.session.pop("fido_state", None)
-    return {"success": True, "message": "FIDO2 key registered"}
+    mark_auth_method(request, "fido")
+    return {
+        "success": True,
+        "message": "FIDO2 key registered",
+        "redirect": get_post_auth_redirect(request),
+    }
 
 @app.get("/admin/login", response_class=HTMLResponse)
 async def admin_login_page(request: Request):
@@ -950,13 +699,12 @@ async def admin_login(request: Request, csrf: None = Depends(verify_csrf)):
 async def admin_dashboard(request: Request, admin: bool = Depends(get_current_admin)):
     """Admin dashboard."""
     conn = get_db()
-    users = conn.execute("SELECT id, username, phone_verified FROM users ORDER BY id").fetchall()
+    users = conn.execute("SELECT id, username FROM users ORDER BY id").fetchall()
     conn.close()
     return templates.TemplateResponse("admin_dashboard.html", {
         "request": request,
         "users": users,
         "user_count": len(users),
-        "phone_verified_count": sum(1 for user in users if user["phone_verified"]),
     })
 
 @app.post("/admin/delete_user")
@@ -1008,42 +756,6 @@ async def admin_logout(request: Request, csrf: None = Depends(verify_csrf)):
     """Logout admin."""
     request.session.pop("admin", None)
     return RedirectResponse(url="/admin/login", status_code=302)
-
-@app.get("/face_upload_fallback", response_class=HTMLResponse)
-async def face_upload_fallback_page(request: Request, username: str = Depends(get_current_user)):
-    """Fallback face upload page."""
-    return templates.TemplateResponse("face_upload_fallback.html", {"request": request})
-
-@app.post("/face_upload_fallback")
-async def face_upload_fallback(
-    request: Request,
-    file: UploadFile = File(...),
-    username: str = Depends(get_current_user),
-    csrf: None = Depends(verify_csrf)
-):
-    """Handle fallback face upload."""
-    if not file or file.filename == "":
-        raise HTTPException(status_code=400, detail="No file selected")
-
-    if not allowed_file(file.filename):
-        raise HTTPException(status_code=400, detail="Invalid file type")
-
-    file.file.seek(0, os.SEEK_END)
-    upload_size = file.file.tell()
-    file.file.seek(0)
-    if upload_size > cfg.MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="Uploaded file is too large")
-
-    path = save_uploaded_file(file, username, CAPTURE_DIR)
-    try:
-        decrypted_data = load_encrypted_file(path)
-        img = Image.open(BytesIO(decrypted_data)).convert("RGB")
-        arr = np.array(img)
-        encode_face(username, arr)
-        return {"success": True, "message": "Face registered successfully"}
-    except Exception as e:
-        logger.exception(f"Face upload fallback failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import subprocess

@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="csrf-token" content="{{ csrf_token }}"/>
-  <title>Dashboard</title>
+  <title>Security Center</title>
   <link rel="stylesheet" href="/static/theme.css"/>
 </head>
 <body class="app-shell">
@@ -12,13 +12,13 @@
     <section class="app-grid">
       <article class="hero-card">
         <div class="hero-inner">
-          <div class="eyebrow">Authenticated</div>
+          <div class="eyebrow">Authenticated Session</div>
           <h1 class="hero-title">Welcome, {{ username }}</h1>
-          <p class="hero-copy">Your security dashboard is ready. Complete or revisit each factor from a single control panel.</p>
+          <p class="hero-copy">Your primary sign-in is complete. Finish all three methods in this session to unlock the final authenticated experience page.</p>
           <div class="feature-stack">
-            <div class="feature-chip">Portable local-first setup with secure defaults.</div>
-            <div class="feature-chip">Face, TOTP, and FIDO2 enrollment in one flow.</div>
-            <div class="feature-chip">Stricter session, host, upload, and request protections.</div>
+            <div class="feature-chip">Current method count: {{ auth_progress.count }} / 3</div>
+            <div class="feature-chip">{% if auth_progress.is_complete %}All three methods are complete.{% else %}Add the remaining verified methods below to reach the final screen.{% endif %}</div>
+            <div class="feature-chip">Use password login, TOTP, and FIDO2 security keys to complete the full flow.</div>
           </div>
         </div>
       </article>
@@ -28,7 +28,7 @@
           <div class="topbar">
             <div class="title-block">
               <h2>Security Center</h2>
-              <p>Choose the factor you want to configure or verify next.</p>
+              <p>Use the controls below to complete extra factors or jump into the final destination if you already have three verified methods.</p>
             </div>
             <form method="post" action="/logout">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -38,22 +38,44 @@
 
           <div class="grid-three spacer-top">
             <div class="option-card">
-              <div class="metric-label">Biometrics</div>
-              <div class="metric-value">Face</div>
-              <p class="muted">Register a full-face capture with live framing validation.</p>
-              <a href="/face_register" class="btn btn-primary spacer-top">Setup Face Registration</a>
+              <div class="metric-label">Completed</div>
+              <div class="metric-value">{{ auth_progress.count }}</div>
+              <p class="muted">Unique methods recorded in the current session.</p>
             </div>
+            <div class="option-card">
+              <div class="metric-label">Final Access</div>
+              <div class="metric-value">{% if auth_progress.is_complete %}Ready{% else %}Locked{% endif %}</div>
+              <p class="muted">Three methods are required before the final page opens.</p>
+            </div>
+            <div class="option-card">
+              <div class="metric-label">Methods</div>
+              <div class="metric-value" style="font-size: 1rem;">{{ auth_progress.methods|join(', ') or 'password' }}</div>
+              <p class="muted">This session tracks password plus the additional verified factors you complete next.</p>
+            </div>
+          </div>
+
+          <div class="grid-two spacer-top">
             <div class="option-card">
               <div class="metric-label">Authenticator</div>
               <div class="metric-value">TOTP</div>
-              <p class="muted">Scan a QR code and verify your first code inside the app.</p>
-              <a href="/totp_setup" class="btn btn-secondary spacer-top">Setup TOTP</a>
+              <p class="muted">{% if auth_progress.has_totp %}Your authenticator secret exists. Verify a code to add TOTP to this session.{% else %}Create and verify a TOTP secret to activate this factor.{% endif %}</p>
+              <a href="/totp_setup" class="btn btn-secondary spacer-top">{{ 'Verify / Manage TOTP' if auth_progress.has_totp else 'Setup TOTP' }}</a>
             </div>
             <div class="option-card">
               <div class="metric-label">Hardware</div>
               <div class="metric-value">FIDO2</div>
-              <p class="muted">Register a security key using WebAuthn on a supported browser.</p>
-              <a href="/fido_register" class="btn btn-soft spacer-top">Register Security Key</a>
+              <p class="muted">{% if auth_progress.has_fido %}Your security key is registered. Re-registering also counts as a completed method in this flow.{% else %}Register a security key to add a hardware-backed method.{% endif %}</p>
+              <a href="/fido_register" class="btn btn-soft spacer-top">{{ 'Manage Security Key' if auth_progress.has_fido else 'Register Security Key' }}</a>
+            </div>
+          </div>
+
+          <div class="soft-panel tile spacer-top">
+            <div class="topbar" style="margin-bottom:0;">
+              <div class="title-block">
+                <h3>Final destination</h3>
+                <p>{% if auth_progress.is_complete %}All requirements are met. Open the polished post-authentication page now.{% else %}Complete password, TOTP, and FIDO2 first. The final page unlocks automatically once all three are verified in this session.{% endif %}</p>
+              </div>
+              <a href="/auth/success" class="btn btn-primary" {% if not auth_progress.is_complete %}style="pointer-events:none;opacity:0.55;"{% endif %}>Open Final Page</a>
             </div>
           </div>
         </div>

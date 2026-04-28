@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Portable runner for the FastAPI 3FA application.
-It installs missing requirements when possible, ensures local secrets exist,
-and starts the app with safe local-development defaults.
+Cross-platform launcher for the FastAPI 3FA application.
+Run with: python run_portable.py
 """
 
+import importlib.util
 import os
 import secrets
 import subprocess
@@ -13,71 +13,72 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(BASE_DIR))
-
-os.environ.setdefault("FASTAPI_ENV", "development")
-os.environ.setdefault("HOST", "127.0.0.1")
-os.environ.setdefault("PORT", "8000")
-os.environ.setdefault("RELOAD", "false")
+REQUIREMENTS = BASE_DIR / "requirements.txt"
+SECRET_FILE = BASE_DIR / "secret.key"
+ENCRYPTION_FILE = BASE_DIR / "encryption.key"
 
 
-def ensure_secret(name: str, length: int = 48) -> str:
-    value = os.environ.get(name)
-    if value:
-        return value
-    generated = secrets.token_urlsafe(length)
-    os.environ[name] = generated
-    return generated
+def ensure_text_secret(path: Path, env_name: str, length: int = 48) -> None:
+    if os.environ.get(env_name):
+        return
+    if path.exists() and path.read_text(encoding="utf-8").strip():
+        return
+    path.write_text(secrets.token_urlsafe(length), encoding="utf-8")
 
 
-def install_requirements() -> bool:
-    requirements = BASE_DIR / "requirements.txt"
-    try:
-      subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(requirements)])
-      return True
-    except subprocess.CalledProcessError:
-      print("Failed to install requirements automatically.")
-      print(f"Run manually: {sys.executable} -m pip install -r requirements.txt")
-      return False
+def ensure_fernet_secret(path: Path, env_name: str) -> None:
+    if os.environ.get(env_name):
+        return
+    if path.exists() and path.read_bytes().strip():
+        return
+    from cryptography.fernet import Fernet
+    path.write_bytes(Fernet.generate_key())
 
 
-def dependencies_ready() -> bool:
-    try:
-        import fastapi  # noqa: F401
-        import uvicorn  # noqa: F401
-        import numpy  # noqa: F401
-        import cv2  # noqa: F401
-        import pyotp  # noqa: F401
-        return True
-    except ImportError:
-        return False
+def module_exists(name: str) -> bool:
+    return importlib.util.find_spec(name) is not None
 
 
-def main():
-    ensure_secret("SECRET_KEY")
+def install_requirements() -> None:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(REQUIREMENTS)])
 
-    if not dependencies_ready():
-        print("Installing missing dependencies from requirements.txt ...")
-        if not install_requirements():
-            sys.exit(1)
 
-    from app import app, FACE_AVAILABLE  # noqa: WPS433
-    import uvicorn  # noqa: WPS433
+def ensure_dependencies() -> None:
+    required_modules = ("fastapi", "uvicorn", "pyotp", "fido2", "cryptography")
+    if all(module_exists(module) for module in required_modules):
+        return
+    print("Installing missing dependencies from requirements.txt ...")
+    install_requirements()
 
-    host = os.environ.get("HOST", "127.0.0.1")
-    port = int(os.environ.get("PORT", "8000"))
-    reload_enabled = os.environ.get("RELOAD", "false").lower() == "true"
 
-    print("3FA FastAPI application loaded successfully")
-    print(f"Face recognition available: {FACE_AVAILABLE}")
-    print(f"Open: http://localhost:{port}")
+def main() -> None:
+    os.chdir(BASE_DIR)
+    sys.path.insert(0, str(BASE_DIR))
+
+    os.environ.setdefault("FASTAPI_ENV", "development")
+    os.environ.setdefault("HOST", "127.0.0.1")
+    os.environ.setdefault("PORT", "8000")
+    os.environ.setdefault("RELOAD", "false")
+
+    ensure_dependencies()
+    ensure_text_secret(SECRET_FILE, "SECRET_KEY")
+    ensure_fernet_secret(ENCRYPTION_FILE, "ENCRYPTION_KEY")
+
+    import uvicorn
+
+    host = os.environ["HOST"]
+    port = int(os.environ["PORT"])
+    reload_enabled = os.environ.get("RELOAD", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+    print("3FA application loaded")
+    print(f"Open: http://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}")
 
     uvicorn.run(
         "app:app",
         host=host,
         port=port,
         reload=reload_enabled,
-        log_level="info",
+        log_level=os.environ.get("LOG_LEVEL", "info").lower(),
     )
 
 

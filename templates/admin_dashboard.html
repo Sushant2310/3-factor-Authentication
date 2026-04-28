@@ -28,8 +28,8 @@
             <div class="metric-value">{{ user_count }}</div>
           </div>
           <div class="metric-card soft-panel">
-            <div class="metric-label">Phone Verified</div>
-            <div class="metric-value">{{ phone_verified_count }}</div>
+            <div class="metric-label">Reset Access</div>
+            <div class="metric-value">Enabled</div>
           </div>
           <div class="metric-card soft-panel">
             <div class="metric-label">Admin Scope</div>
@@ -49,7 +49,6 @@
               <tr>
                 <th>ID</th>
                 <th>Username</th>
-                <th>Phone Verified</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -58,11 +57,6 @@
               <tr>
                 <td>{{ user['id'] }}</td>
                 <td>{{ user['username'] }}</td>
-                <td>
-                  <span class="pill-status {{ 'good' if user['phone_verified'] else 'bad' }}">
-                    {{ 'Yes' if user['phone_verified'] else 'No' }}
-                  </span>
-                </td>
                 <td>
                   <div class="button-row">
                     <form method="post" action="/admin/delete_user" onsubmit="return confirm('Delete user {{ user['username'] }}?')">

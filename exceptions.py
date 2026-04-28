@@ -58,16 +58,6 @@ class ValidationError(HTTPException):
         )
 
 
-class FaceRecognitionError(HTTPException):
-    """Face recognition error."""
-
-    def __init__(self, detail: str = "Face recognition failed"):
-        super().__init__(
-            status_code=400,
-            detail=detail
-        )
-
-
 class DatabaseError(HTTPException):
     """Database operation error."""
 
@@ -155,11 +145,3 @@ class FIDO2Error(HTTPException):
         )
 
 
-class LivenessDetectionError(HTTPException):
-    """Liveness detection error."""
-
-    def __init__(self, detail: str = "Liveness detection failed"):
-        super().__init__(
-            status_code=400,
-            detail=detail
-        )

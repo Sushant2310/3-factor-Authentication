@@ -1,5 +1,7 @@
 import os
-from datetime import timedelta
+import secrets
+from pathlib import Path
+from cryptography.fernet import Fernet
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -18,20 +20,44 @@ class Config:
     """Application configuration for FastAPI."""
 
     BASE_DIR = os.path.dirname(__file__)
+    BASE_PATH = Path(__file__).resolve().parent
 
-    SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-secret-key-change-in-production"
-    ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
+    @staticmethod
+    def _read_or_create_text_secret(path: Path, generator) -> str:
+        if path.exists():
+            return path.read_text(encoding="utf-8").strip()
+        value = generator()
+        path.write_text(value, encoding="utf-8")
+        return value
+
+    @classmethod
+    def _secret_key(cls) -> str:
+        return os.environ.get("SECRET_KEY") or cls._read_or_create_text_secret(
+            cls.BASE_PATH / "secret.key",
+            lambda: secrets.token_urlsafe(48),
+        )
+
+    @classmethod
+    def _fernet_key(cls) -> bytes:
+        env_value = os.environ.get("ENCRYPTION_KEY")
+        if env_value:
+            return env_value.encode("ascii")
+        key_path = cls.BASE_PATH / "encryption.key"
+        if key_path.exists():
+            return key_path.read_bytes().strip()
+        generated = Fernet.generate_key()
+        key_path.write_bytes(generated)
+        return generated
+
+    SECRET_KEY = None
+    ENCRYPTION_KEY = None
+    SESSION_ENCRYPTION_KEY = None
     DATABASE_PATH = os.path.join(BASE_DIR, "database", "users.db")
 
     ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME") or "admin"
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or "letmein1234"
 
-    FACE_TOLERANCE = float(os.environ.get("FACE_TOLERANCE") or 0.6)
-    CAPTURE_DIR = os.path.join(BASE_DIR, "captured")
     MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES") or 5_000_000)
-    MAX_IMAGE_DIMENSION = int(os.environ.get("MAX_IMAGE_DIMENSION") or 4096)
-
-    OTP_TTL = timedelta(minutes=int(os.environ.get("OTP_TTL_MINUTES") or 5))
 
     LOG_LEVEL = os.environ.get("LOG_LEVEL") or "INFO"
     LOG_FILE = os.path.join(BASE_DIR, "3fa.log")
@@ -62,7 +88,6 @@ class Config:
     @classmethod
     def init_app(cls, app):
         os.makedirs(os.path.dirname(cls.DATABASE_PATH), exist_ok=True)
-        os.makedirs(cls.CAPTURE_DIR, exist_ok=True)
 
         import logging
         from logging.handlers import RotatingFileHandler
@@ -92,15 +117,6 @@ class ProductionConfig(Config):
     LOG_LEVEL = "WARNING"
     SESSION_HTTPS_ONLY = True
     SESSION_SAME_SITE = "lax"
-    SECRET_KEY = os.environ.get("SECRET_KEY")
-    if not SECRET_KEY:
-        try:
-            with open("secret.key", "r", encoding="utf-8") as f:
-                SECRET_KEY = f.read().strip()
-        except FileNotFoundError:
-            raise ValueError(
-                "SECRET_KEY environment variable must be set in production or secret.key file must exist"
-            )
 
 
 class TestingConfig(Config):
@@ -114,3 +130,10 @@ config = {
     "testing": TestingConfig,
     "default": DevelopmentConfig,
 }
+
+
+for _config_class in {Config, DevelopmentConfig, ProductionConfig, TestingConfig}:
+    if not getattr(_config_class, "SECRET_KEY", None):
+        _config_class.SECRET_KEY = _config_class._secret_key()
+    _config_class.ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
+    _config_class.SESSION_ENCRYPTION_KEY = _config_class._fernet_key()

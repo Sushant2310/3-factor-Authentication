@@ -1,12 +1,11 @@
 import sqlite3
 import os
-import numpy as np
 import pyotp
-from datetime import datetime
 from cryptography.fernet import Fernet
 import threading
 import logging
-from typing import Optional, List, Tuple, Any
+from typing import Optional
+from utils import decrypt_text, encrypt_text
 
 logger = logging.getLogger(__name__)
 
@@ -31,22 +30,7 @@ def load_secret_key() -> Fernet:
             key = f.read()
     return Fernet(key)
 
-# Separate key for biometric data encryption
-BIOMETRIC_KEY_PATH = 'biometric.key'
-def load_biometric_key() -> Fernet:
-    """Generate or load the encryption key used for biometric data"""
-    if not os.path.exists(BIOMETRIC_KEY_PATH):
-        key = Fernet.generate_key()
-        with open(BIOMETRIC_KEY_PATH, "wb") as f:
-            f.write(key)
-        logger.info("Generated new biometric encryption key")
-    else:
-        with open(BIOMETRIC_KEY_PATH, "rb") as f:
-            key = f.read()
-    return Fernet(key)
-
 fernet = load_secret_key()
-biometric_fernet = load_biometric_key()
 
 
 def get_db() -> sqlite3.Connection:
@@ -71,9 +55,7 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             password TEXT,
             totp_secret TEXT,
-            fido_credentials TEXT,
-            face_encoding BLOB,
-            phone_verified INTEGER DEFAULT 0
+            fido_credentials TEXT
         )
     ''')
 
@@ -102,7 +84,24 @@ def init_db():
     ''')
 
     conn.commit()
-    # Don't close connection - it's from the pool
+    migrate_plaintext_auth_secrets(conn)
+
+
+def migrate_plaintext_auth_secrets(conn: sqlite3.Connection) -> None:
+    """Encrypt legacy plaintext TOTP and FIDO values in existing databases."""
+    rows = conn.execute(
+        "SELECT id, totp_secret, fido_credentials FROM users"
+    ).fetchall()
+    for row in rows:
+        updates = {}
+        if row["totp_secret"] and not str(row["totp_secret"]).startswith("enc:"):
+            updates["totp_secret"] = encrypt_text(row["totp_secret"])
+        if row["fido_credentials"] and not str(row["fido_credentials"]).startswith("enc:"):
+            updates["fido_credentials"] = encrypt_text(row["fido_credentials"])
+        for column, value in updates.items():
+            conn.execute(f"UPDATE users SET {column} = ? WHERE id = ?", (value, row["id"]))
+    if rows:
+        conn.commit()
 
 
 # ---------- User Management ----------
@@ -114,10 +113,11 @@ def create_user(username: str, password: str, totp_secret: Optional[str] = None)
         from werkzeug.security import generate_password_hash
         hashed = generate_password_hash(password)
 
+        encrypted_totp_secret = encrypt_text(totp_secret) if totp_secret else None
         conn.execute(
-            '''INSERT INTO users (username, password, totp_secret, phone_verified)
-               VALUES (?, ?, ?, 0)''',
-            (username, hashed, totp_secret)
+            '''INSERT INTO users (username, password, totp_secret)
+               VALUES (?, ?, ?)''',
+            (username, hashed, encrypted_totp_secret)
         )
         conn.commit()
 
@@ -139,13 +139,19 @@ def get_user_id_by_username(username: str) -> Optional[int]:
     return result['id'] if result else None
 
 
+def get_user_by_username(username: str) -> Optional[sqlite3.Row]:
+    conn = get_db()
+    cursor = conn.execute('SELECT * FROM users WHERE username = ?', (username,))
+    return cursor.fetchone()
+
+
 def verify_password(username: str, password: str) -> bool:
     """Verify password for a user."""
     from werkzeug.security import check_password_hash
     conn = get_db()
     cursor = conn.execute('SELECT password FROM users WHERE username = ?', (username,))
     row = cursor.fetchone()
-    if not row:
+    if not row or not row['password']:
         return False
     return check_password_hash(row['password'], password)
 
@@ -163,7 +169,38 @@ def get_totp_secret(username: str) -> Optional[str]:
         (username,)
     )
     result = cursor.fetchone()
-    return result['totp_secret'] if result else None
+    return decrypt_text(result['totp_secret']) if result and result['totp_secret'] else None
+
+
+def set_totp_secret(username: str, totp_secret: str) -> None:
+    """Store an encrypted TOTP secret for a user."""
+    conn = get_db()
+    conn.execute(
+        'UPDATE users SET totp_secret = ? WHERE username = ?',
+        (encrypt_text(totp_secret), username)
+    )
+    conn.commit()
+
+
+def get_fido_credentials(username: str) -> Optional[str]:
+    """Get encrypted-at-rest FIDO credential JSON for user."""
+    conn = get_db()
+    cursor = conn.execute(
+        'SELECT fido_credentials FROM users WHERE username = ?',
+        (username,)
+    )
+    result = cursor.fetchone()
+    return decrypt_text(result['fido_credentials']) if result and result['fido_credentials'] else None
+
+
+def set_fido_credentials(username: str, credential_json: str) -> None:
+    """Store encrypted FIDO credential JSON for user."""
+    conn = get_db()
+    conn.execute(
+        'UPDATE users SET fido_credentials = ? WHERE username = ?',
+        (encrypt_text(credential_json), username)
+    )
+    conn.commit()
 
 
 def verify_totp(username: str, code: str) -> bool:
@@ -173,20 +210,6 @@ def verify_totp(username: str, code: str) -> bool:
         return False
     totp = pyotp.TOTP(secret)
     return totp.verify(code)
-
-
-# ---------- Logging ----------
-def add_login_time(username):
-    """Record login time for user"""
-    user_id = get_user_id_by_username(username)
-    if user_id:
-        conn = get_db()
-        conn.execute(
-            'INSERT INTO login_history (user_id, auth_method, timestamp) VALUES (?, ?, ?)',
-            (user_id, 'face', datetime.now())
-        )
-        conn.commit()
-
 
 def get_login_times(username):
     """Get login history for user"""
@@ -250,59 +273,5 @@ def get_failed_login_attempts(username: str, time_window_minutes: int = 30):
         (user_id,)
     )
     return [dict(row) for row in cursor.fetchall()]
-
-
-def store_face_encoding(username, encoding):
-    """Store face encoding as encrypted binary blob"""
-    conn = get_db()
-    # Convert numpy array to bytes (InsightFace embeddings are float32)
-    encoding_bytes = encoding.astype(np.float32).tobytes()
-
-    # Encrypt the biometric data before storing
-    encrypted_data = biometric_fernet.encrypt(encoding_bytes)
-
-    conn.execute(
-        'UPDATE users SET face_encoding = ? WHERE username = ?',
-        (encrypted_data, username)
-    )
-    conn.commit()
-    logger.info(f"Encrypted face encoding stored for user: {username}")
-
-
-def get_face_encoding(username):
-    """Retrieve and decrypt face encoding as numpy array"""
-    conn = get_db()
-    cursor = conn.execute(
-        'SELECT face_encoding FROM users WHERE username = ?',
-        (username,)
-    )
-    result = cursor.fetchone()
-    if result and result[0]:
-        try:
-            # Decrypt the biometric data
-            decrypted_data = biometric_fernet.decrypt(result[0])
-            # Convert bytes back to numpy array (InsightFace uses float32)
-            return np.frombuffer(decrypted_data, dtype=np.float32)
-        except Exception as e:
-            logger.error(f"Failed to decrypt face encoding for user {username}: {e}")
-            return None
-    return None
-
-
-def set_phone_verified(username, value=True):
-    """Set phone verified status for user"""
-    conn = get_db()
-    conn.execute('UPDATE users SET phone_verified = ? WHERE username = ?', (1 if value else 0, username))
-    conn.commit()
-
-
-def get_phone_verified(username):
-    """Get phone verified status for user"""
-    conn = get_db()
-    cur = conn.execute('SELECT phone_verified FROM users WHERE username = ?', (username,))
-    row = cur.fetchone()
-    return bool(row['phone_verified']) if row else False
-
-
 # Initialize database when module is imported
 init_db()

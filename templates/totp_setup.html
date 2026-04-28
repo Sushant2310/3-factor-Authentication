@@ -82,7 +82,7 @@
         }
         showMessage('TOTP verified. Redirecting...', 'success');
         setTimeout(() => {
-          location.href = '/dashboard';
+          location.href = j.redirect || '/dashboard';
         }, 900);
       } catch (e) {
         showMessage('Network error: ' + e.message, 'error');

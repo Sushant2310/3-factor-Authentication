@@ -95,7 +95,7 @@
 
         setMessage('Security key registered. Redirecting…', 'success');
         setTimeout(() => {
-          location.href = '/dashboard';
+          location.href = j.redirect || '/dashboard';
         }, 900);
       } catch (e) {
         setMessage('Error: ' + e.message, 'error');
