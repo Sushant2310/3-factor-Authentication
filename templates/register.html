@@ -281,16 +281,16 @@
     <section class="intro">
       <div class="pill">Account Setup</div>
       <h1>Create a stronger account from the start.</h1>
-      <p>Build your password with live feedback, confirm it before submitting, and enable the two additional factors required to complete the three-step sign-in flow.</p>
+      <p>Build your password with live feedback, confirm it before submitting, and enable the additional factors required to complete the three-step sign-in flow.</p>
       <div class="check-grid">
         <div class="check-item">Live password strength meter with visual scoring.</div>
         <div class="check-item">Show or hide both password fields while you verify what you typed.</div>
-        <div class="check-item">Authenticator-code and security-key setup without extra capture steps.</div>
+        <div class="check-item">Authenticator-code, security-key, or built-in biometric setup without extra capture steps.</div>
       </div>
     </section>
     <section class="card">
       <h2>Create account</h2>
-      <p class="subcopy">Password is required and the account setup also requires both TOTP and a FIDO2 security key.</p>
+      <p class="subcopy">Password is required and the account setup also requires TOTP plus at least one WebAuthn method: security key, biometric, or both.</p>
       <div id="message">
         {% if request.query_params.get('error') == 'username_password_required' %}
           <div class="alert">Username and password required</div>
@@ -301,7 +301,7 @@
         {% elif request.query_params.get('error') == 'passwords_dont_match' %}
           <div class="alert">Passwords do not match</div>
         {% elif request.query_params.get('error') == 'select_required_methods' %}
-          <div class="alert">Enable both TOTP and a FIDO2 security key to continue</div>
+          <div class="alert">Enable TOTP and at least one WebAuthn method to continue</div>
         {% elif request.query_params.get('error') == 'username_exists' %}
           <div class="alert">Username already exists</div>
         {% elif request.query_params.get('error') == 'account_creation_failed' %}
@@ -363,6 +363,10 @@
             <label class="choice">
               <input name="enable_fido" type="checkbox" checked />
               <span><span class="choice-title">FIDO2 security key</span><span class="choice-note">Register a hardware security key for stronger phishing resistance.</span></span>
+            </label>
+            <label class="choice">
+              <input name="enable_biometric" type="checkbox" checked />
+              <span><span class="choice-title">Built-in biometric</span><span class="choice-note">Use the device's fingerprint, face unlock, or screen-lock backed authenticator.</span></span>
             </label>
           </div>
         </div>
@@ -442,9 +446,18 @@
         button.textContent = isPassword ? 'Hide' : 'Show';
       });
     });
-    document.querySelectorAll('input[name="enable_totp"], input[name="enable_fido"]').forEach((checkbox) => {
+    document.querySelectorAll('input[name="enable_totp"]').forEach((checkbox) => {
       checkbox.addEventListener('change', () => {
         checkbox.checked = true;
+      });
+    });
+    document.querySelectorAll('input[name="enable_fido"], input[name="enable_biometric"]').forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        const fido = document.querySelector('input[name="enable_fido"]');
+        const biometric = document.querySelector('input[name="enable_biometric"]');
+        if (!fido.checked && !biometric.checked) {
+          checkbox.checked = true;
+        }
       });
     });
     passwordInput.addEventListener('input', () => {

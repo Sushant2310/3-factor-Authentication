@@ -56,7 +56,7 @@ def main() -> None:
     sys.path.insert(0, str(BASE_DIR))
 
     os.environ.setdefault("FASTAPI_ENV", "development")
-    os.environ.setdefault("HOST", "127.0.0.1")
+    os.environ.setdefault("HOST", "localhost")
     os.environ.setdefault("PORT", "8000")
     os.environ.setdefault("RELOAD", "false")
 
@@ -71,7 +71,8 @@ def main() -> None:
     reload_enabled = os.environ.get("RELOAD", "false").strip().lower() in {"1", "true", "yes", "on"}
 
     print("3FA application loaded")
-    print(f"Open: http://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}")
+    browser_host = "localhost" if host in {"127.0.0.1", "0.0.0.0"} else host
+    print(f"Open: http://{browser_host}:{port}")
 
     uvicorn.run(
         "app:app",

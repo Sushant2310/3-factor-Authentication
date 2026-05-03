@@ -18,7 +18,7 @@
           <div class="feature-stack">
             <div class="feature-chip">Current method count: {{ auth_progress.count }} / 3</div>
             <div class="feature-chip">{% if auth_progress.is_complete %}All three methods are complete.{% else %}Add the remaining verified methods below to reach the final screen.{% endif %}</div>
-            <div class="feature-chip">Use password login, TOTP, and FIDO2 security keys to complete the full flow.</div>
+            <div class="feature-chip">Use password login, TOTP, and WebAuthn authenticators to complete the full flow.</div>
           </div>
         </div>
       </article>
@@ -64,8 +64,8 @@
             <div class="option-card">
               <div class="metric-label">Hardware</div>
               <div class="metric-value">FIDO2</div>
-              <p class="muted">{% if auth_progress.has_fido %}Your security key is registered. Re-registering also counts as a completed method in this flow.{% else %}Register a security key to add a hardware-backed method.{% endif %}</p>
-              <a href="/fido_register" class="btn btn-soft spacer-top">{{ 'Manage Security Key' if auth_progress.has_fido else 'Register Security Key' }}</a>
+              <p class="muted">{% if auth_progress.has_fido %}Your WebAuthn authenticator is registered. Re-registering also counts as a completed method in this flow.{% else %}Register a security key or built-in biometric authenticator to add a hardware-backed method.{% endif %}</p>
+              <a href="/fido_register" class="btn btn-soft spacer-top">{{ 'Manage Authenticator' if auth_progress.has_fido else 'Register Authenticator' }}</a>
             </div>
           </div>
 
@@ -73,7 +73,7 @@
             <div class="topbar" style="margin-bottom:0;">
               <div class="title-block">
                 <h3>Final destination</h3>
-                <p>{% if auth_progress.is_complete %}All requirements are met. Open the polished post-authentication page now.{% else %}Complete password, TOTP, and FIDO2 first. The final page unlocks automatically once all three are verified in this session.{% endif %}</p>
+                <p>{% if auth_progress.is_complete %}All requirements are met. Open the polished post-authentication page now.{% else %}Complete password, TOTP, and WebAuthn first. The final page unlocks automatically once all three are verified in this session.{% endif %}</p>
               </div>
               <a href="/auth/success" class="btn btn-primary" {% if not auth_progress.is_complete %}style="pointer-events:none;opacity:0.55;"{% endif %}>Open Final Page</a>
             </div>

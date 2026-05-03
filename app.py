@@ -43,6 +43,7 @@ class RegisterRequest(BaseModel):
     password: str
     enable_totp: bool = False
     enable_fido: bool = False
+    enable_biometric: bool = False
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -173,15 +174,62 @@ def get_auth_progress(request: Request, username: str) -> Dict[str, Any]:
         "has_fido": has_fido,
     }
 
+
+def render_page(request: Request, template: str, **context):
+    return templates.TemplateResponse(template, {"request": request, **context})
+
+
+async def request_payload(request: Request) -> Dict[str, Any]:
+    try:
+        data = await request.json()
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return dict(await request.form())
+
+
+def reset_session(request: Request, **values):
+    request.session.clear()
+    request.session["csrf_token"] = secrets.token_urlsafe(32)
+    request.session.update(values)
+
+
+def request_audit_context(request: Request) -> Dict[str, Any]:
+    return {
+        "ip_address": getattr(getattr(request, "client", None), "host", None),
+        "user_agent": request.headers.get("user-agent"),
+    }
+
+
+def get_authenticator_preference(request: Request) -> str:
+    preference = (request.session.get("authenticator_preference") or "auto").strip().lower()
+    if preference in {"security_key", "biometric", "auto"}:
+        return preference
+    return "auto"
+
+
+def get_request_hostname(request: Request) -> str:
+    return (request.url.hostname or request.headers.get("host", "").split(":")[0] or "").strip().lower()
+
+
+def get_canonical_local_url(request: Request) -> str | None:
+    host = get_request_hostname(request)
+    if host not in {"127.0.0.1", "0.0.0.0"}:
+        return None
+    port = request.url.port
+    canonical = request.url.replace(
+        netloc=f"localhost:{port}" if port else "localhost"
+    )
+    return str(canonical)
+
 # FIDO2 server setup
 def get_fido_server(request: Request):
-    host = request.headers.get("host", "").split(":")[0]
-    local_hosts = {"", "localhost", "127.0.0.1", "0.0.0.0"}
-    if host in local_hosts:
-        rp_id = "localhost"
-    elif "." in host:
-        rp_id = host
-    else:
+    host = get_request_hostname(request)
+    rp_id = cfg.FIDO_RP_ID or (
+        "localhost" if host in {"", "localhost", "127.0.0.1", "0.0.0.0"} else host
+    )
+    if "." not in rp_id and rp_id != "localhost":
         rp_id = "localhost"
     logger.info(f"FIDO2 rp.id used: {rp_id}")
     rp = PublicKeyCredentialRpEntity(id=rp_id, name="3FA Demo")
@@ -195,6 +243,11 @@ def as_bool(value):
     if value is None:
         return False
     return str(value).strip().lower() in {"1", "true", "on", "yes"}
+
+
+def to_base64url(data: bytes) -> str:
+    """Encode bytes as unpadded base64url for WebAuthn payloads."""
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
 
 def get_or_create_csrf_token(request: Request) -> str:
     token = request.session.get("csrf_token")
@@ -232,6 +285,10 @@ async def verify_csrf(request: Request):
 
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
+    canonical_local_url = get_canonical_local_url(request)
+    if canonical_local_url and request.method in {"GET", "HEAD"} and request.url.path != "/health":
+        return RedirectResponse(url=canonical_local_url, status_code=307)
+
     content_length = request.headers.get("content-length")
     if content_length:
         try:
@@ -275,25 +332,43 @@ async def root(request: Request):
 async def health():
     return {"status": "ok", "app": cfg.APP_NAME}
 
+
+async def read_request_value(request: Request, field: str) -> Any:
+    return (await request_payload(request)).get(field)
+
+
+def verify_totp_submission(request: Request, username: str, code: str) -> Dict[str, Any]:
+    if not code or len(code) != 6:
+        raise HTTPException(status_code=400, detail="Invalid OTP code")
+
+    totp_secret = get_totp_secret(username)
+    if not totp_secret:
+        raise HTTPException(status_code=400, detail="TOTP not initialized")
+
+    if not pyotp.TOTP(totp_secret).verify(code):
+        raise HTTPException(status_code=401, detail="Invalid OTP code")
+
+    request.session["totp_verified"] = True
+    mark_auth_method(request, "totp")
+    return {
+        "success": True,
+        "message": "TOTP verified",
+        "redirect": get_post_auth_redirect(request),
+    }
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Login page."""
-    return templates.TemplateResponse("login.html", {"request": request})
+    return render_page(request, "login.html")
 
 @app.post("/login")
 @rate_limit(max_calls=5, time_window=300)  # 5 attempts per 5 minutes
 async def login(request: Request, csrf: None = Depends(verify_csrf)):
     """Handle login."""
-    try:
-        # Try to get data from JSON first
-        data = await request.json()
-        username = data.get("username")
-        password = data.get("password")
-    except:
-        # Fallback to form data
-        form_data = await request.form()
-        username = form_data.get("username")
-        password = form_data.get("password")
+    data = await request_payload(request)
+    username = data.get("username")
+    password = data.get("password")
+    audit_context = request_audit_context(request)
 
     try:
         username = validate_username(username)
@@ -309,9 +384,8 @@ async def login(request: Request, csrf: None = Depends(verify_csrf)):
                 None,
                 "login_failed",
                 f"Unknown user login attempt for {username}",
-                ip_address=getattr(getattr(request, "client", None), "host", None),
-                user_agent=request.headers.get("user-agent"),
                 success=False,
+                **audit_context,
             )
             raise UserNotFoundError(username)
 
@@ -320,24 +394,19 @@ async def login(request: Request, csrf: None = Depends(verify_csrf)):
                 user_id,
                 "login_failed",
                 "Invalid password",
-                ip_address=getattr(getattr(request, "client", None), "host", None),
-                user_agent=request.headers.get("user-agent"),
                 success=False,
+                **audit_context,
             )
             raise InvalidPasswordError()
 
-        request.session.clear()
-        request.session["csrf_token"] = secrets.token_urlsafe(32)
-        request.session["username"] = username
-        request.session["user_id"] = user_id
+        reset_session(request, username=username, user_id=user_id)
         mark_auth_method(request, "password")
         log_audit_event(
             user_id,
             "login_success",
             "User logged in successfully",
-            ip_address=getattr(getattr(request, "client", None), "host", None),
-            user_agent=request.headers.get("user-agent"),
             success=True,
+            **audit_context,
         )
 
         return RedirectResponse(url=get_post_auth_redirect(request), status_code=302)
@@ -352,31 +421,23 @@ async def login(request: Request, csrf: None = Depends(verify_csrf)):
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     """Registration page."""
-    return templates.TemplateResponse("register.html", {"request": request})
+    return render_page(request, "register.html")
 
 @app.post("/register")
 @rate_limit(max_calls=10, time_window=3600)  # 10 registrations per hour for testing
 async def register(request: Request, csrf: None = Depends(verify_csrf)):
     """Handle user registration."""
-    try:
-        # Try to get data from JSON first
-        data = await request.json()
-        username = data.get("username")
-        password = data.get("password")
-        confirm_password = data.get("confirm_password")
-        enable_totp = data.get("enable_totp", False)
-        enable_fido = data.get("enable_fido", False)
-    except:
-        # Fallback to form data
-        form_data = await request.form()
-        username = form_data.get("username")
-        password = form_data.get("password")
-        confirm_password = form_data.get("confirm_password")
-        enable_totp = form_data.get("enable_totp", False)
-        enable_fido = form_data.get("enable_fido", False)
+    data = await request_payload(request)
+    username = data.get("username")
+    password = data.get("password")
+    confirm_password = data.get("confirm_password")
+    enable_totp = data.get("enable_totp", False)
+    enable_fido = data.get("enable_fido", False)
+    enable_biometric = data.get("enable_biometric", False)
 
     enable_totp = as_bool(enable_totp)
     enable_fido = as_bool(enable_fido)
+    enable_biometric = as_bool(enable_biometric)
 
     username = (username or "").strip()
     password = password or ""
@@ -405,8 +466,8 @@ async def register(request: Request, csrf: None = Depends(verify_csrf)):
             status_code=302
         )
 
-    # Enforce at least 2 methods
-    if not enable_totp or not enable_fido:
+    # Enforce password + TOTP + one WebAuthn authenticator path.
+    if not enable_totp or (not enable_fido and not enable_biometric):
         return RedirectResponse(url="/register?error=select_required_methods", status_code=302)
 
     # Check if user exists
@@ -428,32 +489,29 @@ async def register(request: Request, csrf: None = Depends(verify_csrf)):
         logger.exception(f"create_user failed for {username}")
         return RedirectResponse(url="/register?error=account_creation_failed", status_code=302)
 
-    # Log in the new user
-    request.session.clear()
-    request.session["csrf_token"] = secrets.token_urlsafe(32)
-    request.session["username"] = username
-    request.session["user_id"] = uid
+    reset_session(
+        request,
+        username=username,
+        user_id=uid,
+        authenticator_preference=(
+            "auto" if enable_fido and enable_biometric
+            else "biometric" if enable_biometric
+            else "security_key"
+        ),
+    )
     mark_auth_method(request, "password")
 
-    # Decide next step
-    if enable_totp:
-        next_url = "/totp_setup"
-    elif enable_fido:
-        next_url = "/fido_register"
-    else:
-        next_url = "/dashboard"
-
-    return RedirectResponse(url=next_url, status_code=302)
+    return RedirectResponse(url="/totp_setup", status_code=302)
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, username: str = Depends(get_current_user)):
     """Dashboard page."""
-    auth_progress = get_auth_progress(request, username)
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "username": username,
-        "auth_progress": auth_progress,
-    })
+    return render_page(
+        request,
+        "dashboard.html",
+        username=username,
+        auth_progress=get_auth_progress(request, username),
+    )
 
 
 @app.get("/auth/success", response_class=HTMLResponse)
@@ -461,11 +519,7 @@ async def auth_success_page(request: Request, username: str = Depends(get_curren
     auth_progress = get_auth_progress(request, username)
     if not auth_progress["is_complete"]:
         return RedirectResponse(url="/dashboard", status_code=302)
-    return templates.TemplateResponse("auth_success.html", {
-        "request": request,
-        "username": username,
-        "auth_progress": auth_progress,
-    })
+    return render_page(request, "auth_success.html", username=username, auth_progress=auth_progress)
 
 @app.post("/logout")
 async def logout(request: Request, csrf: None = Depends(verify_csrf)):
@@ -476,13 +530,7 @@ async def logout(request: Request, csrf: None = Depends(verify_csrf)):
 @app.get("/totp_setup", response_class=HTMLResponse)
 async def totp_setup_page(request: Request, username: str = Depends(get_current_user)):
     """TOTP setup page."""
-    conn = get_db()
-    cursor = conn.execute('SELECT totp_secret FROM users WHERE username = ?', (username,))
-    row = cursor.fetchone()
-    conn.close()
-
-    totp_secret = row['totp_secret'] if row else None
-    totp_secret = get_totp_secret(username) if row and row['totp_secret'] else None
+    totp_secret = get_totp_secret(username)
     if not totp_secret:
         totp_secret = pyotp.random_base32()
         set_totp_secret(username, totp_secret)
@@ -497,11 +545,7 @@ async def totp_setup_page(request: Request, username: str = Depends(get_current_
     img.save(buf, format="PNG")
     qr_b64 = base64.b64encode(buf.getvalue()).decode()
 
-    return templates.TemplateResponse("totp_setup.html", {
-        "request": request,
-        "qr_image": qr_b64,
-        "secret": totp_secret
-    })
+    return render_page(request, "totp_setup.html", qr_image=qr_b64, secret=totp_secret)
 
 @app.post("/totp_setup")
 async def totp_setup_verify(
@@ -510,35 +554,7 @@ async def totp_setup_verify(
     csrf: None = Depends(verify_csrf)
 ):
     """Verify TOTP code during setup."""
-    try:
-        data = await request.json()
-        code = data.get("code")
-    except:
-        # Fallback to form data
-        form_data = await request.form()
-        code = form_data.get("code")
-
-    if not code or len(code) != 6:
-        raise HTTPException(status_code=400, detail="Invalid OTP code")
-
-    # Get TOTP secret from DB
-    totp_secret = get_totp_secret(username)
-    if not totp_secret:
-        raise HTTPException(status_code=400, detail="TOTP not initialized")
-
-    # Verify code
-    totp = pyotp.TOTP(totp_secret)
-    if not totp.verify(code):
-        raise HTTPException(status_code=401, detail="Invalid OTP code")
-
-    # Mark TOTP as verified
-    request.session["totp_verified"] = True
-    mark_auth_method(request, "totp")
-    return {
-        "success": True,
-        "message": "TOTP verified",
-        "redirect": get_post_auth_redirect(request),
-    }
+    return verify_totp_submission(request, username, await read_request_value(request, "code"))
 
 @app.post("/totp_verify")
 async def totp_verify(
@@ -548,27 +564,7 @@ async def totp_verify(
     csrf: None = Depends(verify_csrf)
 ):
     """Verify TOTP code."""
-    if not code or len(code) != 6:
-        raise HTTPException(status_code=400, detail="Invalid OTP code")
-
-    # Get TOTP secret from DB
-    totp_secret = get_totp_secret(username)
-    if not totp_secret:
-        raise HTTPException(status_code=400, detail="TOTP not initialized")
-
-    # Verify code
-    totp = pyotp.TOTP(totp_secret)
-    if not totp.verify(code):
-        raise HTTPException(status_code=401, detail="Invalid OTP code")
-
-    # Mark TOTP as verified
-    request.session["totp_verified"] = True
-    mark_auth_method(request, "totp")
-    return {
-        "success": True,
-        "message": "TOTP verified",
-        "redirect": get_post_auth_redirect(request),
-    }
+    return verify_totp_submission(request, username, code)
 
 @app.get("/fido_register", response_class=HTMLResponse)
 async def fido_register_page(request: Request, username: str = Depends(get_current_user)):
@@ -582,16 +578,18 @@ async def fido_register_page(request: Request, username: str = Depends(get_curre
     fido_server = get_fido_server(request)
     options, state = fido_server.register_begin(user, [])
     request.session["fido_state"] = state
+    authenticator_preference = get_authenticator_preference(request)
+    attachment = {"security_key": "cross-platform", "biometric": "platform"}.get(authenticator_preference)
 
     options_dict = {
         "publicKey": {
-            "challenge": base64.b64encode(options.public_key.challenge).decode('utf-8'),
+            "challenge": to_base64url(options.public_key.challenge),
             "rp": {
                 "id": options.public_key.rp.id,
                 "name": options.public_key.rp.name
             },
             "user": {
-                "id": base64.b64encode(options.public_key.user.id).decode('utf-8'),
+                "id": to_base64url(options.public_key.user.id),
                 "name": options.public_key.user.name,
                 "displayName": options.public_key.user.display_name
             },
@@ -600,20 +598,17 @@ async def fido_register_page(request: Request, username: str = Depends(get_curre
                 for param in options.public_key.pub_key_cred_params
             ],
             "authenticatorSelection": {
-                "authenticatorAttachment": getattr(options.public_key.authenticator_selection, 'authenticator_attachment', None),
+                "authenticatorAttachment": attachment,
                 "requireResidentKey": getattr(options.public_key.authenticator_selection, 'require_resident_key', False),
                 "userVerification": getattr(options.public_key.authenticator_selection, 'user_verification', 'preferred')
             } if options.public_key.authenticator_selection else None,
             "timeout": getattr(options.public_key, 'timeout', 60000),
             "attestation": getattr(options.public_key, 'attestation', 'none')
-        }
+        },
+        "authenticatorPreference": authenticator_preference,
     }
 
-    return templates.TemplateResponse("fido_register.html", {
-        "request": request,
-        "username": username,
-        "options": options_dict
-    })
+    return render_page(request, "fido_register.html", username=username, options=options_dict)
 
 @app.post("/fido_register")
 async def fido_register(
@@ -625,7 +620,7 @@ async def fido_register(
     try:
         data = await request.json()
     except Exception:
-        form_data = await request.form()
+        form_data = await request_payload(request)
         data = {
             "id": form_data.get("id"),
             "rawId": form_data.get("rawId"),
@@ -655,14 +650,15 @@ async def fido_register(
         raise HTTPException(status_code=400, detail="FIDO2 credential data missing")
 
     credential_data = {
-        "credential_id": base64.b64encode(credential_data.credential_id).decode('utf-8'),
-        "public_key": base64.b64encode(cbor.encode(credential_data.public_key)).decode('utf-8'),
+        "credential_id": to_base64url(credential_data.credential_id),
+        "public_key": to_base64url(cbor.encode(credential_data.public_key)),
         "sign_count": auth_data.counter
     }
 
     set_fido_credentials(username, json.dumps(credential_data))
 
     request.session.pop("fido_state", None)
+    request.session.pop("authenticator_preference", None)
     mark_auth_method(request, "fido")
     return {
         "success": True,
@@ -673,27 +669,19 @@ async def fido_register(
 @app.get("/admin/login", response_class=HTMLResponse)
 async def admin_login_page(request: Request):
     """Admin login page."""
-    return templates.TemplateResponse("admin_login.html", {"request": request})
+    return render_page(request, "admin_login.html")
 
 @app.post("/admin/login")
 async def admin_login(request: Request, csrf: None = Depends(verify_csrf)):
     """Handle admin login."""
-    try:
-        data = await request.json()
-        username = data.get("username")
-        password = data.get("password")
-    except Exception:
-        form_data = await request.form()
-        username = form_data.get("username")
-        password = form_data.get("password")
+    data = await request_payload(request)
+    username = data.get("username")
+    password = data.get("password")
 
     if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-        request.session.clear()
-        request.session["csrf_token"] = secrets.token_urlsafe(32)
-        request.session["admin"] = True
+        reset_session(request, admin=True)
         return {"success": True, "next": "/admin"}
-    else:
-        raise HTTPException(status_code=401, detail="Invalid admin credentials")
+    raise HTTPException(status_code=401, detail="Invalid admin credentials")
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, admin: bool = Depends(get_current_admin)):
@@ -701,11 +689,7 @@ async def admin_dashboard(request: Request, admin: bool = Depends(get_current_ad
     conn = get_db()
     users = conn.execute("SELECT id, username FROM users ORDER BY id").fetchall()
     conn.close()
-    return templates.TemplateResponse("admin_dashboard.html", {
-        "request": request,
-        "users": users,
-        "user_count": len(users),
-    })
+    return render_page(request, "admin_dashboard.html", users=users, user_count=len(users))
 
 @app.post("/admin/delete_user")
 async def admin_delete_user(
@@ -728,14 +712,7 @@ async def admin_reset_password(
     csrf: None = Depends(verify_csrf)
 ):
     """Reset user password."""
-    try:
-        # Try to get data from JSON first
-        data = await request.json()
-        user_id = data.get("user_id")
-    except:
-        # Fallback to form data
-        form_data = await request.form()
-        user_id = form_data.get("user_id")
+    user_id = (await request_payload(request)).get("user_id")
 
     new_password = f"Tmp-{secrets.token_urlsafe(9)}A1"
     from werkzeug.security import generate_password_hash

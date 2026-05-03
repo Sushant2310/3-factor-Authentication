@@ -6,9 +6,7 @@ from cryptography.fernet import Fernet
 
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    return default if value is None else value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def env_list(name: str, default: str) -> list[str]:
@@ -49,9 +47,7 @@ class Config:
         key_path.write_bytes(generated)
         return generated
 
-    SECRET_KEY = None
-    ENCRYPTION_KEY = None
-    SESSION_ENCRYPTION_KEY = None
+    SECRET_KEY = ENCRYPTION_KEY = SESSION_ENCRYPTION_KEY = None
     DATABASE_PATH = os.path.join(BASE_DIR, "database", "users.db")
 
     ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME") or "admin"
@@ -62,7 +58,7 @@ class Config:
     LOG_LEVEL = os.environ.get("LOG_LEVEL") or "INFO"
     LOG_FILE = os.path.join(BASE_DIR, "3fa.log")
 
-    HOST = os.environ.get("HOST") or "127.0.0.1"
+    HOST = os.environ.get("HOST") or "localhost"
     PORT = int(os.environ.get("PORT") or 8000)
     DEBUG = env_bool("DEBUG", False)
 
@@ -72,14 +68,8 @@ class Config:
     RATE_LIMIT_LOGIN = int(os.environ.get("RATE_LIMIT_LOGIN") or 5)
     RATE_LIMIT_REGISTER = int(os.environ.get("RATE_LIMIT_REGISTER") or 10)
 
-    ALLOWED_HOSTS = env_list(
-        "ALLOWED_HOSTS",
-        "localhost,127.0.0.1,0.0.0.0,testserver"
-    )
-    CORS_ORIGINS = env_list(
-        "CORS_ORIGINS",
-        "http://localhost:8000,http://127.0.0.1:8000"
-    )
+    ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0,testserver")
+    CORS_ORIGINS = env_list("CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
     SESSION_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME") or "threefa_session"
     SESSION_MAX_AGE = int(os.environ.get("SESSION_MAX_AGE") or 3600)
     SESSION_SAME_SITE = os.environ.get("SESSION_SAME_SITE") or "lax"
@@ -94,17 +84,12 @@ class Config:
 
         logger = logging.getLogger("3fa")
         if not logger.handlers:
-            file_handler = RotatingFileHandler(
-                cls.LOG_FILE,
-                maxBytes=2 * 1024 * 1024,
-                backupCount=2,
-            )
-            file_handler.setFormatter(
-                logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-            )
-            file_handler.setLevel(getattr(logging, cls.LOG_LEVEL.upper()))
+            log_level = getattr(logging, cls.LOG_LEVEL.upper())
+            file_handler = RotatingFileHandler(cls.LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=2)
+            file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+            file_handler.setLevel(log_level)
             logger.addHandler(file_handler)
-            logger.setLevel(getattr(logging, cls.LOG_LEVEL.upper()))
+            logger.setLevel(log_level)
 
 
 class DevelopmentConfig(Config):

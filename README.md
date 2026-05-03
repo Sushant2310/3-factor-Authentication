@@ -57,7 +57,7 @@ This project can be used as:
 ### Local Setup
 
 ```powershell
-cd D:\3fa
+cd $path
 python -m pip install -r requirements.txt
 python run_portable.py
 ```

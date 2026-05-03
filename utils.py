@@ -6,8 +6,10 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "gif", "tiff", "tif", "webp",
 ENCRYPTION_KEY_PATH = os.path.join(os.path.dirname(__file__), "encryption.key")
 ENCRYPTED_PREFIX = "enc:"
 
+
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 def get_encryption_key():
     key = os.environ.get('ENCRYPTION_KEY')
@@ -47,27 +49,13 @@ def save_uploaded_file(file, username, capture_dir):
     ext = file.filename.rsplit('.', 1)[1].lower()
     filename = secure_filename(f"{username}_upload.{ext}")
     path = os.path.join(capture_dir, filename)
-
-    # Read file data
     file_data = file.file.read() if hasattr(file, "file") else file.read()
-
-    # Encrypt the file data
-    key = get_encryption_key()
-    fernet = Fernet(key)
-    encrypted_data = fernet.encrypt(file_data)
-
-    # Save encrypted data
     with open(path, 'wb') as f:
-        f.write(encrypted_data)
-
+        f.write(Fernet(get_encryption_key()).encrypt(file_data))
     return path
+
 
 def load_encrypted_file(path):
     """Load and decrypt an encrypted file."""
     with open(path, 'rb') as f:
-        encrypted_data = f.read()
-
-    key = get_encryption_key()
-    fernet = Fernet(key)
-    decrypted_data = fernet.decrypt(encrypted_data)
-    return decrypted_data
+        return Fernet(get_encryption_key()).decrypt(f.read())

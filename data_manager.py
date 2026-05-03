@@ -1,37 +1,14 @@
 import sqlite3
 import os
 import pyotp
-from cryptography.fernet import Fernet
-import threading
 import logging
 from typing import Optional
 from utils import decrypt_text, encrypt_text
 
 logger = logging.getLogger(__name__)
 
-# Database configuration
 DB_PATH = os.path.join(os.path.dirname(__file__), "database", "users.db")
-SECRET_KEY_PATH = 'secret.key'
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-
-# Connection pool for better performance
-_connection_pool = {}
-_pool_lock = threading.Lock()
-
-# ---------- Encryption Setup ----------
-def load_secret_key() -> Fernet:
-    """Generate or load the encryption key used for TOTP secrets"""
-    if not os.path.exists(SECRET_KEY_PATH):
-        key = Fernet.generate_key()
-        with open(SECRET_KEY_PATH, "wb") as f:
-            f.write(key)
-    else:
-        with open(SECRET_KEY_PATH, "rb") as f:
-            key = f.read()
-    return Fernet(key)
-
-fernet = load_secret_key()
-
 
 def get_db() -> sqlite3.Connection:
     """Get database connection - create new connection for each request to avoid threading issues"""
@@ -43,7 +20,17 @@ def get_db() -> sqlite3.Connection:
     return conn
 
 
-# ---------- Database Setup ----------
+def fetch_user_value(username: str, column: str):
+    row = get_db().execute(f"SELECT {column} FROM users WHERE username = ?", (username,)).fetchone()
+    return row[column] if row else None
+
+
+def update_user_value(username: str, column: str, value) -> None:
+    conn = get_db()
+    conn.execute(f"UPDATE users SET {column} = ? WHERE username = ?", (value, username))
+    conn.commit()
+
+
 def init_db():
     """Initialize database tables"""
     conn = get_db()
@@ -104,12 +91,10 @@ def migrate_plaintext_auth_secrets(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
-# ---------- User Management ----------
 def create_user(username: str, password: str, totp_secret: Optional[str] = None) -> Optional[int]:
     """Create a new user account."""
     conn = get_db()
     try:
-        # hash the password (use werkzeug or bcrypt)
         from werkzeug.security import generate_password_hash
         hashed = generate_password_hash(password)
 
@@ -121,7 +106,6 @@ def create_user(username: str, password: str, totp_secret: Optional[str] = None)
         )
         conn.commit()
 
-        # Return the user ID
         cursor = conn.execute('SELECT id FROM users WHERE username = ?', (username,))
         row = cursor.fetchone()
         return row['id'] if row else None
@@ -133,27 +117,18 @@ def create_user(username: str, password: str, totp_secret: Optional[str] = None)
 
 def get_user_id_by_username(username: str) -> Optional[int]:
     """Get user ID from username"""
-    conn = get_db()
-    cursor = conn.execute('SELECT id FROM users WHERE username = ?', (username,))
-    result = cursor.fetchone()
-    return result['id'] if result else None
+    return fetch_user_value(username, "id")
 
 
 def get_user_by_username(username: str) -> Optional[sqlite3.Row]:
-    conn = get_db()
-    cursor = conn.execute('SELECT * FROM users WHERE username = ?', (username,))
-    return cursor.fetchone()
+    return get_db().execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
 
 
 def verify_password(username: str, password: str) -> bool:
     """Verify password for a user."""
     from werkzeug.security import check_password_hash
-    conn = get_db()
-    cursor = conn.execute('SELECT password FROM users WHERE username = ?', (username,))
-    row = cursor.fetchone()
-    if not row or not row['password']:
-        return False
-    return check_password_hash(row['password'], password)
+    hashed = fetch_user_value(username, "password")
+    return bool(hashed and check_password_hash(hashed, password))
 
 
 def generate_totp_secret() -> str:
@@ -163,53 +138,30 @@ def generate_totp_secret() -> str:
 
 def get_totp_secret(username: str) -> Optional[str]:
     """Get TOTP secret for user"""
-    conn = get_db()
-    cursor = conn.execute(
-        'SELECT totp_secret FROM users WHERE username = ?',
-        (username,)
-    )
-    result = cursor.fetchone()
-    return decrypt_text(result['totp_secret']) if result and result['totp_secret'] else None
+    secret = fetch_user_value(username, "totp_secret")
+    return decrypt_text(secret) if secret else None
 
 
 def set_totp_secret(username: str, totp_secret: str) -> None:
     """Store an encrypted TOTP secret for a user."""
-    conn = get_db()
-    conn.execute(
-        'UPDATE users SET totp_secret = ? WHERE username = ?',
-        (encrypt_text(totp_secret), username)
-    )
-    conn.commit()
+    update_user_value(username, "totp_secret", encrypt_text(totp_secret))
 
 
 def get_fido_credentials(username: str) -> Optional[str]:
     """Get encrypted-at-rest FIDO credential JSON for user."""
-    conn = get_db()
-    cursor = conn.execute(
-        'SELECT fido_credentials FROM users WHERE username = ?',
-        (username,)
-    )
-    result = cursor.fetchone()
-    return decrypt_text(result['fido_credentials']) if result and result['fido_credentials'] else None
+    credentials = fetch_user_value(username, "fido_credentials")
+    return decrypt_text(credentials) if credentials else None
 
 
 def set_fido_credentials(username: str, credential_json: str) -> None:
     """Store encrypted FIDO credential JSON for user."""
-    conn = get_db()
-    conn.execute(
-        'UPDATE users SET fido_credentials = ? WHERE username = ?',
-        (encrypt_text(credential_json), username)
-    )
-    conn.commit()
+    update_user_value(username, "fido_credentials", encrypt_text(credential_json))
 
 
 def verify_totp(username: str, code: str) -> bool:
     """Verify TOTP code"""
     secret = get_totp_secret(username)
-    if not secret:
-        return False
-    totp = pyotp.TOTP(secret)
-    return totp.verify(code)
+    return bool(secret and pyotp.TOTP(secret).verify(code))
 
 def get_login_times(username):
     """Get login history for user"""
@@ -225,7 +177,6 @@ def get_login_times(username):
     return [row['timestamp'] for row in cursor.fetchall()]
 
 
-# ---------- Audit Logging ----------
 def log_audit_event(user_id: Optional[int], event_type: str, event_description: str,
                    ip_address: Optional[str] = None, user_agent: Optional[str] = None,
                    success: bool = False):
@@ -245,16 +196,12 @@ def log_audit_event(user_id: Optional[int], event_type: str, event_description: 
 def get_audit_events(user_id: Optional[int] = None, limit: int = 100):
     """Get audit events, optionally filtered by user"""
     conn = get_db()
+    query = 'SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?'
+    params = (limit,)
     if user_id:
-        cursor = conn.execute(
-            'SELECT * FROM audit_log WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?',
-            (user_id, limit)
-        )
-    else:
-        cursor = conn.execute(
-            'SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?',
-            (limit,)
-        )
+        query = 'SELECT * FROM audit_log WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?'
+        params = (user_id, limit)
+    cursor = conn.execute(query, params)
     return [dict(row) for row in cursor.fetchall()]
 
 
@@ -273,5 +220,4 @@ def get_failed_login_attempts(username: str, time_window_minutes: int = 30):
         (user_id,)
     )
     return [dict(row) for row in cursor.fetchall()]
-# Initialize database when module is imported
 init_db()

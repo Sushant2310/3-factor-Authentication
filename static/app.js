@@ -5,7 +5,7 @@ window.threeFA = {
   },
 
   async jsonFetch(url, payload, options = {}) {
-    const response = await fetch(url, {
+    return fetch(url, {
       method: options.method || 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -18,14 +18,11 @@ window.threeFA = {
       }),
       credentials: options.credentials || 'same-origin',
     });
-    return response;
   },
 
   async formFetch(url, formData, options = {}) {
-    if (!formData.has('csrf_token')) {
-      formData.append('csrf_token', this.getCsrfToken());
-    }
-    const response = await fetch(url, {
+    if (!formData.has('csrf_token')) formData.append('csrf_token', this.getCsrfToken());
+    return fetch(url, {
       method: options.method || 'POST',
       headers: {
         'X-CSRF-Token': this.getCsrfToken(),
@@ -34,6 +31,5 @@ window.threeFA = {
       body: formData,
       credentials: options.credentials || 'same-origin',
     });
-    return response;
   },
 };
