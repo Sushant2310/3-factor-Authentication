@@ -36,7 +36,7 @@
           </div>
           <div class="button-row spacer-top">
             <button id="registerBtn" class="btn btn-primary" type="button">Register Authenticator</button>
-            <a href="/dashboard" class="btn btn-soft">Back to Dashboard</a>
+            <a href="/settings" class="btn btn-soft">Back to Settings</a>
           </div>
         </div>
       </section>
@@ -76,12 +76,14 @@
 
       if (preference === 'biometric') {
         options.publicKey.authenticatorSelection.authenticatorAttachment = 'platform';
+        options.publicKey.authenticatorSelection.userVerification = 'required';
         setMessage('Biometric or device-bound authenticator selected.', 'warning');
       } else if (preference === 'security_key') {
         options.publicKey.authenticatorSelection.authenticatorAttachment = 'cross-platform';
         setMessage('External security key selected.', 'warning');
       } else {
         options.publicKey.authenticatorSelection.authenticatorAttachment = null;
+        options.publicKey.authenticatorSelection.userVerification = 'preferred';
         setMessage('Any available authenticator can be used.', 'warning');
       }
     }
@@ -91,12 +93,29 @@
     document.getElementById('preferAuto').addEventListener('click', () => applyAuthenticatorPreference('auto'));
     applyAuthenticatorPreference(authenticatorPreference);
 
+    async function checkBiometricAvailability() {
+      if (!window.PublicKeyCredential) {
+        return false;
+      }
+      if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') {
+        return false;
+      }
+      try {
+        return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      } catch {
+        return false;
+      }
+    }
+
     document.getElementById('registerBtn').addEventListener('click', async () => {
       setMessage('Waiting for authenticator prompt...', 'warning');
 
       try {
         if (!window.PublicKeyCredential || !navigator.credentials || !navigator.credentials.create) {
           throw new Error('This browser or page context does not support WebAuthn. Use a current browser on http://localhost or https.');
+        }
+        if (authenticatorPreference === 'biometric' && !(await checkBiometricAvailability())) {
+          throw new Error('Biometric login is not available in this browser or device context. Use http://localhost in a full browser with Windows Hello, Touch ID, Face ID, or Android screen lock enabled.');
         }
 
         const publicKey = {
@@ -136,7 +155,7 @@
 
         setMessage('Authenticator registered. Redirecting...', 'success');
         setTimeout(() => {
-          location.href = j.redirect || '/dashboard';
+          location.href = j.redirect || '/settings';
         }, 900);
       } catch (e) {
         setMessage('Error: ' + e.message, 'error');

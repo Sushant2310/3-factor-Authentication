@@ -28,10 +28,15 @@
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top left, rgba(15, 118, 110, 0.2), transparent 32%),
-        radial-gradient(circle at top right, rgba(234, 88, 12, 0.18), transparent 28%),
-        linear-gradient(145deg, #faf6ef 0%, #efe6d7 100%);
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.24), transparent 32%),
+        radial-gradient(circle at top right, rgba(234, 88, 12, 0.22), transparent 28%),
+        radial-gradient(circle at bottom left, rgba(225, 29, 72, 0.18), transparent 30%),
+        radial-gradient(circle at 60% 18%, rgba(124, 58, 237, 0.14), transparent 26%),
+        linear-gradient(145deg, #faf6ef 0%, #e8f4ef 24%, #f7e8de 48%, #efe7f9 72%, #eef4d9 100%);
+      background-size: 160% 160%, 160% 160%, 180% 180%, 180% 180%, 220% 220%;
+      background-position: 0% 0%, 100% 0%, 0% 100%, 50% 0%, 0% 50%;
       padding: 28px;
+      animation: registerSpectrum 24s ease-in-out infinite;
     }
     .layout {
       width: min(1120px, 100%);
@@ -174,7 +179,7 @@
       height: 100%;
       border-radius: inherit;
       background: linear-gradient(90deg, #dc2626, #f59e0b, #16a34a);
-      transition: width 0.25s ease;
+      transition: width 0.25s ease, background 0.25s ease;
     }
     .requirements {
       display: grid;
@@ -274,6 +279,58 @@
       .card, .intro { padding: 24px 20px; border-radius: 24px; }
       .grid, .requirements { grid-template-columns: 1fr; }
     }
+
+    .intro, .card { animation: panelIn 0.6s ease both; }
+    .card { animation-delay: 0.08s; }
+    .choice, .check-item, .strength-panel {
+      transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .choice:hover, .check-item:hover, .strength-panel:hover {
+      transform: translateY(-2px);
+      border-color: rgba(15, 118, 110, 0.24);
+      box-shadow: 0 12px 26px rgba(31, 41, 51, 0.08);
+    }
+    .choice:has(input:checked) {
+      border-color: rgba(15, 118, 110, 0.42);
+      box-shadow: 0 14px 30px rgba(15, 118, 110, 0.12);
+      transform: translateY(-1px);
+    }
+    .check-item { animation: checklistFloat 4.4s ease-in-out infinite; }
+    .check-item:nth-child(2) { animation-delay: 0.18s; }
+    .check-item:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes panelIn {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes checklistFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+    @keyframes registerSpectrum {
+      0% {
+        background-position: 0% 0%, 100% 0%, 0% 100%, 50% 0%, 0% 50%;
+        filter: hue-rotate(0deg);
+      }
+      33% {
+        background-position: 24% 18%, 82% 26%, 14% 84%, 70% 12%, 100% 50%;
+        filter: hue-rotate(95deg);
+      }
+      66% {
+        background-position: 100% 42%, 0% 18%, 62% 100%, 24% 0%, 0% 50%;
+        filter: hue-rotate(210deg);
+      }
+      100% {
+        background-position: 0% 100%, 100% 100%, 100% 22%, 52% 72%, 0% 50%;
+        filter: hue-rotate(360deg);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -281,19 +338,19 @@
     <section class="intro">
       <div class="pill">Account Setup</div>
       <h1>Create a stronger account from the start.</h1>
-      <p>Build your password with live feedback, confirm it before submitting, and enable the additional factors required to complete the three-step sign-in flow.</p>
+      <p>Build your password with live feedback and enable the additional factors required to complete the three-step sign-in flow.</p>
       <div class="check-grid">
         <div class="check-item">Live password strength meter with visual scoring.</div>
         <div class="check-item">Show or hide both password fields while you verify what you typed.</div>
-        <div class="check-item">Authenticator-code, security-key, or built-in biometric setup without extra capture steps.</div>
+        <div class="check-item">Authenticator-code plus fingerprint, face unlock, or security-key setup without extra capture steps.</div>
       </div>
     </section>
     <section class="card">
       <h2>Create account</h2>
-      <p class="subcopy">Password is required and the account setup also requires TOTP plus at least one WebAuthn method: security key, biometric, or both.</p>
+      <p class="subcopy">Username and password are required. Setup also requires TOTP plus at least one WebAuthn method: security key, fingerprint, or face unlock.</p>
       <div id="message">
         {% if request.query_params.get('error') == 'username_password_required' %}
-          <div class="alert">Username and password required</div>
+          <div class="alert">Username and password are required</div>
         {% elif request.query_params.get('error') == 'password_too_short' %}
           <div class="alert">Password must be at least 8 characters</div>
         {% elif request.query_params.get('error') == 'username_too_short' %}
@@ -303,7 +360,7 @@
         {% elif request.query_params.get('error') == 'select_required_methods' %}
           <div class="alert">Enable TOTP and at least one WebAuthn method to continue</div>
         {% elif request.query_params.get('error') == 'username_exists' %}
-          <div class="alert">Username already exists</div>
+          <div class="alert">This username has already been taken</div>
         {% elif request.query_params.get('error') == 'account_creation_failed' %}
           <div class="alert">Account creation failed</div>
         {% elif request.query_params.get('error') == 'invalid_username' %}
@@ -366,7 +423,7 @@
             </label>
             <label class="choice">
               <input name="enable_biometric" type="checkbox" checked />
-              <span><span class="choice-title">Built-in biometric</span><span class="choice-note">Use the device's fingerprint, face unlock, or screen-lock backed authenticator.</span></span>
+              <span><span class="choice-title">Built-in biometric</span><span class="choice-note">Use the device's fingerprint, face unlock, or screen-lock backed authenticator through WebAuthn.</span></span>
             </label>
           </div>
         </div>

@@ -4,523 +4,350 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="csrf-token" content="{{ csrf_token }}"/>
-  <title>Verified Workspace</title>
+  <title>Inventory Management</title>
   <link rel="stylesheet" href="/static/theme.css"/>
   <style>
-    :root {
-      --ink: #17212b;
-      --muted: #60707e;
-      --line: rgba(67, 72, 82, 0.13);
-      --panel: #fbfcf8;
-      --soft: #f0f4ed;
-      --green: #17745e;
-      --blue: #235789;
-      --amber: #b46a24;
-      --rose: #9f3456;
-      --shadow: 0 18px 40px rgba(23, 33, 43, 0.1);
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
+    body.inventory-shell {
       margin: 0;
       min-height: 100vh;
-      font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif;
-      color: var(--ink);
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: #17212b;
       background:
         linear-gradient(90deg, rgba(23, 33, 43, 0.035) 1px, transparent 1px),
         linear-gradient(rgba(23, 33, 43, 0.028) 1px, transparent 1px),
         linear-gradient(135deg, #f8faf4 0%, #eef3ec 48%, #e8eef2 100%);
       background-size: 32px 32px, 32px 32px, auto;
     }
-
-    .workspace {
+    .inventory-page {
       width: min(1240px, calc(100% - 32px));
       margin: 0 auto;
       padding: 24px 0 36px;
     }
-
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 14px 0 22px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .brand-mark {
-      width: 42px;
-      height: 42px;
-      border-radius: 8px;
-      display: grid;
-      place-items: center;
-      color: #fff;
-      font-weight: 800;
-      background: linear-gradient(135deg, var(--green), var(--blue));
-      box-shadow: var(--shadow);
-    }
-
-    .brand h1 {
-      margin: 0;
-      font-size: 1.15rem;
-      letter-spacing: 0;
-    }
-
-    .brand p {
-      margin: 2px 0 0;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    .top-actions {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .status-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      border: 1px solid rgba(23, 116, 94, 0.16);
-      color: var(--green);
-      background: rgba(23, 116, 94, 0.08);
-      padding: 10px 12px;
-      border-radius: 999px;
-      font-size: 0.9rem;
-      font-weight: 700;
-    }
-
-    .status-dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 0 5px rgba(23, 116, 94, 0.12);
-    }
-
-    .btn {
-      display: inline-flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 42px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      padding: 10px 14px;
-      background: #fff;
-      color: var(--ink);
-      font-weight: 800;
-      text-decoration: none;
-      cursor: pointer;
-      transition: transform 0.16s ease, box-shadow 0.16s ease;
-    }
-
-    .btn:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 10px 18px rgba(23, 33, 43, 0.08);
-    }
-
-    .btn-primary {
-      color: #fff;
-      background: linear-gradient(135deg, var(--green), var(--blue));
-      border-color: transparent;
-    }
-
-    .hero-band {
-      display: grid;
-      grid-template-columns: 1.1fr 0.9fr;
-      gap: 20px;
-      align-items: stretch;
-      padding: 28px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.72);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(10px);
-    }
-
-    .hero-copy h2 {
-      margin: 0;
-      font-size: clamp(2rem, 4vw, 3.2rem);
-      line-height: 1.02;
-      letter-spacing: 0;
-      max-width: 12ch;
-    }
-
-    .hero-copy p {
-      max-width: 42rem;
-      color: var(--muted);
-      line-height: 1.7;
-      margin: 14px 0 0;
-    }
-
-    .method-list {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 22px;
-    }
-
-    .method {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-      padding: 14px;
-    }
-
-    .method strong {
-      display: block;
-      font-size: 0.95rem;
-    }
-
-    .method span {
-      color: var(--muted);
-      font-size: 0.86rem;
-    }
-
-    .quick-panel {
-      background: #17212b;
-      color: #f8fafc;
-      border-radius: 10px;
-      padding: 22px;
-      display: grid;
-      align-content: space-between;
-      gap: 20px;
-    }
-
-    .quick-panel h3 {
-      margin: 0;
-      font-size: 1.2rem;
-    }
-
-    .quick-panel p {
-      color: rgba(248, 250, 252, 0.72);
-      line-height: 1.65;
-      margin: 8px 0 0;
-    }
-
-    .quick-actions {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .quick-action {
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.08);
-      color: #fff;
-      padding: 14px;
-      text-align: left;
-      cursor: pointer;
-      font-weight: 800;
-    }
-
-    .content-shell {
-      display: grid;
-      grid-template-columns: 240px minmax(0, 1fr);
-      gap: 20px;
-      margin-top: 20px;
-    }
-
-    .sidebar {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.74);
-      padding: 12px;
-      height: fit-content;
-    }
-
-    .nav-button {
-      width: 100%;
-      border: 0;
-      border-radius: 8px;
-      padding: 12px 13px;
-      background: transparent;
-      color: var(--ink);
-      text-align: left;
-      cursor: pointer;
-      font-weight: 800;
-    }
-
-    .nav-button.active,
-    .nav-button:hover {
-      background: var(--soft);
-    }
-
-    .main-panel {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.82);
-      box-shadow: var(--shadow);
-      overflow: hidden;
-    }
-
-    .view {
-      display: none;
-      padding: 24px;
-    }
-
-    .view.active {
-      display: block;
-    }
-
-    .view-header {
+    .inventory-topbar,
+    .section-header,
+    .item-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       gap: 16px;
-      margin-bottom: 18px;
     }
-
-    .view-header h3 {
+    .brand h1,
+    .section-header h2 {
+      margin: 0 0 6px;
+    }
+    .brand p,
+    .section-header p,
+    .muted-text {
       margin: 0;
-      font-size: 1.4rem;
-    }
-
-    .view-header p {
-      margin: 6px 0 0;
-      color: var(--muted);
+      color: #60707e;
       line-height: 1.6;
     }
-
-    .grid-three {
+    .top-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .inventory-grid {
+      display: grid;
+      grid-template-columns: 0.85fr 1.15fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .inventory-panel,
+    .inventory-card,
+    .metric-card {
+      border: 1px solid rgba(67, 72, 82, 0.13);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.84);
+      box-shadow: 0 18px 40px rgba(23, 33, 43, 0.08);
+    }
+    .inventory-panel {
+      padding: 20px;
+    }
+    .metric-row {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
+      gap: 12px;
+      margin-top: 18px;
     }
-
-    .card {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
+    .metric-card {
       padding: 16px;
+      box-shadow: none;
     }
-
-    .card-label {
-      color: var(--muted);
+    .metric-label {
+      color: #60707e;
       font-size: 0.86rem;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
-
-    .card-value {
-      font-size: 1.5rem;
+    .metric-value {
+      font-size: 1.55rem;
       font-weight: 900;
     }
-
-    .table {
-      width: 100%;
-      border-collapse: collapse;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      overflow: hidden;
-      background: #fff;
-    }
-
-    .table th,
-    .table td {
-      padding: 13px 14px;
-      border-bottom: 1px solid rgba(67, 72, 82, 0.1);
-      text-align: left;
-    }
-
-    .table th {
-      background: var(--soft);
-      color: var(--muted);
-      font-size: 0.84rem;
-    }
-
-    .workspace-note {
+    .inventory-form {
+      display: grid;
+      gap: 12px;
       margin-top: 16px;
-      padding: 16px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .field label {
+      display: block;
+      font-weight: 800;
+      margin-bottom: 7px;
+    }
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      border: 1px solid rgba(67, 72, 82, 0.16);
       border-radius: 8px;
+      padding: 11px 12px;
+      font-size: 0.96rem;
       background: #fff;
-      border-left: 4px solid var(--amber);
-      color: var(--muted);
-      line-height: 1.65;
     }
-
+    .field textarea {
+      min-height: 74px;
+      resize: vertical;
+    }
+    .field.full {
+      grid-column: 1 / -1;
+    }
+    .inventory-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .inventory-card {
+      padding: 16px;
+    }
+    .item-title {
+      font-weight: 900;
+      font-size: 1.05rem;
+    }
+    .item-meta {
+      color: #60707e;
+      font-size: 0.9rem;
+      margin-top: 4px;
+    }
+    .item-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .edit-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 0.9fr 0.55fr 0.85fr 0.8fr;
+      gap: 10px;
+      margin-top: 12px;
+      align-items: end;
+    }
+    .edit-grid .notes-field {
+      grid-column: 1 / -1;
+    }
+    .empty-state {
+      padding: 26px;
+      text-align: center;
+      border: 1px dashed rgba(67, 72, 82, 0.22);
+      border-radius: 8px;
+      color: #60707e;
+      background: rgba(255, 255, 255, 0.58);
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: #17745e;
+      background: rgba(23, 116, 94, 0.08);
+      border: 1px solid rgba(23, 116, 94, 0.16);
+    }
     @media (max-width: 980px) {
-      .hero-band,
-      .content-shell {
+      .inventory-grid,
+      .metric-row,
+      .form-grid,
+      .edit-grid {
         grid-template-columns: 1fr;
       }
-
-      .method-list,
-      .grid-three {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    @media (max-width: 640px) {
-      .workspace {
-        width: min(100% - 20px, 1240px);
-        padding-top: 12px;
-      }
-
-      .topbar,
-      .view-header {
+      .inventory-topbar,
+      .section-header,
+      .item-header {
         flex-direction: column;
-        align-items: stretch;
       }
-
-      .hero-band,
-      .view {
-        padding: 18px;
-      }
-
-      .quick-actions {
-        grid-template-columns: 1fr;
+      .top-actions {
+        justify-content: flex-start;
       }
     }
   </style>
 </head>
-<body>
-  <main class="workspace">
-    <header class="topbar">
+<body class="inventory-shell">
+  <main class="inventory-page">
+    <header class="inventory-topbar">
       <div class="brand">
-        <div class="brand-mark">3FA</div>
-        <div>
-          <h1>Verified Workspace</h1>
-          <p>Signed in as {{ username }}</p>
-        </div>
+        <h1>Inventory Management</h1>
+        <p>Signed in as {{ username }}</p>
       </div>
       <div class="top-actions">
-        <span class="status-pill"><span class="status-dot"></span>Full access verified</span>
-        <a class="btn" href="/dashboard">Security Center</a>
+        <span class="status-pill">Authenticated</span>
+        <a class="btn btn-soft" href="/settings">Settings</a>
         <form method="post" action="/logout">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-          <button class="btn btn-primary" type="submit">End Session</button>
+          <button class="btn btn-primary" type="submit">Logout</button>
         </form>
       </div>
     </header>
 
-    <section class="hero-band">
-      <div class="hero-copy">
-        <h2>Access granted.</h2>
-        <p>You completed password, authenticator, and security-key verification. This workspace is the protected destination users see only after all three checks pass.</p>
-        <div class="method-list">
-          <div class="method"><strong>Password</strong><span>Primary sign-in complete</span></div>
-          <div class="method"><strong>TOTP</strong><span>Authenticator code verified</span></div>
-          <div class="method"><strong>FIDO2</strong><span>Security key registered</span></div>
-        </div>
+    {% if request.query_params.get('inventory_added') %}
+    <div class="status-banner spacer-top success">Inventory item added.</div>
+    {% elif request.query_params.get('inventory_updated') %}
+    <div class="status-banner spacer-top success">Inventory item updated.</div>
+    {% elif request.query_params.get('inventory_deleted') %}
+    <div class="status-banner spacer-top warning">Inventory item deleted.</div>
+    {% elif request.query_params.get('error') == 'inventory_invalid' %}
+    <div class="status-banner spacer-top error">Check the inventory details and try again.</div>
+    {% elif request.query_params.get('error') %}
+    <div class="status-banner spacer-top error">The inventory action could not be completed.</div>
+    {% endif %}
+
+    <section class="metric-row">
+      <div class="metric-card">
+        <div class="metric-label">Unique Items</div>
+        <div class="metric-value">{{ item_count }}</div>
       </div>
-      <aside class="quick-panel">
-        <div>
-          <h3>Protected app shell</h3>
-          <p>Use this as a customer portal, employee console, document vault, or secure operations landing page.</p>
-        </div>
-        <div class="quick-actions">
-          <button class="quick-action" data-open-view="overview">Overview</button>
-          <button class="quick-action" data-open-view="vault">Vault</button>
-          <button class="quick-action" data-open-view="activity">Activity</button>
-          <button class="quick-action" data-open-view="profile">Profile</button>
-        </div>
-      </aside>
+      <div class="metric-card">
+        <div class="metric-label">Total Quantity</div>
+        <div class="metric-value">{{ total_quantity }}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Low Stock</div>
+        <div class="metric-value">{{ low_stock_count }}</div>
+      </div>
     </section>
 
-    <section class="content-shell">
-      <nav class="sidebar" aria-label="Workspace sections">
-        <button class="nav-button active" data-view="overview" type="button">Overview</button>
-        <button class="nav-button" data-view="vault" type="button">Vault</button>
-        <button class="nav-button" data-view="activity" type="button">Activity</button>
-        <button class="nav-button" data-view="profile" type="button">Profile</button>
-      </nav>
-
-      <section class="main-panel">
-        <article id="overview" class="view active">
-          <div class="view-header">
-            <div>
-              <h3>Workspace Overview</h3>
-              <p>A compact landing surface for the secured area of the app.</p>
+    <section class="inventory-grid">
+      <article class="inventory-panel">
+        <div class="section-header">
+          <div>
+            <h2>Add Item</h2>
+            <p>New records are visible only inside this authenticated user session.</p>
+          </div>
+        </div>
+        <form class="inventory-form" method="post" action="/inventory/add">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <div class="form-grid">
+            <div class="field">
+              <label for="itemName">Item name</label>
+              <input id="itemName" name="item_name" type="text" required />
             </div>
-            <a class="btn" href="/dashboard">Review factors</a>
-          </div>
-          <div class="grid-three">
-            <div class="card"><div class="card-label">Trust Level</div><div class="card-value">High</div></div>
-            <div class="card"><div class="card-label">Methods</div><div class="card-value">{{ auth_progress.count }}/3</div></div>
-            <div class="card"><div class="card-label">Session</div><div class="card-value">Active</div></div>
-          </div>
-          <div class="workspace-note">This page is intentionally app-like: it gives users a real destination after authentication instead of only saying success.</div>
-        </article>
-
-        <article id="vault" class="view">
-          <div class="view-header">
-            <div>
-              <h3>Secure Vault</h3>
-              <p>Example protected content that should only be visible after full verification.</p>
+            <div class="field">
+              <label for="sku">SKU</label>
+              <input id="sku" name="sku" type="text" />
             </div>
-          </div>
-          <table class="table">
-            <thead><tr><th>Item</th><th>Type</th><th>Status</th></tr></thead>
-            <tbody>
-              <tr><td>Identity packet</td><td>Record</td><td>Available</td></tr>
-              <tr><td>Access statement</td><td>Document</td><td>Available</td></tr>
-              <tr><td>Security receipt</td><td>Audit</td><td>Generated</td></tr>
-            </tbody>
-          </table>
-        </article>
-
-        <article id="activity" class="view">
-          <div class="view-header">
-            <div>
-              <h3>Session Activity</h3>
-              <p>The current access path and verification outcome.</p>
+            <div class="field">
+              <label for="quantity">Quantity</label>
+              <input id="quantity" name="quantity" type="number" min="0" value="0" required />
+            </div>
+            <div class="field">
+              <label for="location">Location</label>
+              <input id="location" name="location" type="text" />
+            </div>
+            <div class="field full">
+              <label for="status">Status</label>
+              <select id="status" name="status">
+                <option>In stock</option>
+                <option>Low stock</option>
+                <option>Reserved</option>
+                <option>Ordered</option>
+                <option>Retired</option>
+              </select>
+            </div>
+            <div class="field full">
+              <label for="notes">Notes</label>
+              <textarea id="notes" name="notes"></textarea>
             </div>
           </div>
-          <table class="table">
-            <thead><tr><th>Checkpoint</th><th>Result</th><th>Method</th></tr></thead>
-            <tbody>
-              <tr><td>Step 1</td><td>Passed</td><td>Password</td></tr>
-              <tr><td>Step 2</td><td>Passed</td><td>TOTP</td></tr>
-              <tr><td>Step 3</td><td>Passed</td><td>FIDO2</td></tr>
-            </tbody>
-          </table>
-        </article>
+          <button class="btn btn-primary" type="submit">Add Inventory Item</button>
+        </form>
+      </article>
 
-        <article id="profile" class="view">
-          <div class="view-header">
-            <div>
-              <h3>Verified Profile</h3>
-              <p>Account state for the signed-in user.</p>
-            </div>
+      <article class="inventory-panel">
+        <div class="section-header">
+          <div>
+            <h2>Current Inventory</h2>
+            <p>Update quantities, locations, and item status from this list.</p>
           </div>
-          <div class="grid-three">
-            <div class="card"><div class="card-label">Username</div><div class="card-value" style="font-size:1.1rem;">{{ username }}</div></div>
-            <div class="card"><div class="card-label">Access State</div><div class="card-value">Verified</div></div>
-            <div class="card"><div class="card-label">Next Step</div><div class="card-value" style="font-size:1.1rem;">Surf app</div></div>
-          </div>
-        </article>
-      </section>
+        </div>
+
+        <div class="inventory-list">
+          {% if items %}
+            {% for item in items %}
+            <section class="inventory-card">
+              <div class="item-header">
+                <div>
+                  <div class="item-title">{{ item['item_name'] }}</div>
+                  <div class="item-meta">
+                    SKU: {{ item['sku'] or 'None' }} | Location: {{ item['location'] or 'Unassigned' }} | Updated: {{ item['updated_at'] }}
+                  </div>
+                </div>
+                <span class="status-pill">{{ item['status'] or 'In stock' }}</span>
+              </div>
+              <form method="post" action="/inventory/update">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                <input type="hidden" name="item_id" value="{{ item['id'] }}"/>
+                <div class="edit-grid">
+                  <div class="field">
+                    <label>Item</label>
+                    <input name="item_name" type="text" value="{{ item['item_name'] }}" required />
+                  </div>
+                  <div class="field">
+                    <label>SKU</label>
+                    <input name="sku" type="text" value="{{ item['sku'] or '' }}" />
+                  </div>
+                  <div class="field">
+                    <label>Qty</label>
+                    <input name="quantity" type="number" min="0" value="{{ item['quantity'] or 0 }}" required />
+                  </div>
+                  <div class="field">
+                    <label>Location</label>
+                    <input name="location" type="text" value="{{ item['location'] or '' }}" />
+                  </div>
+                  <div class="field">
+                    <label>Status</label>
+                    <select name="status">
+                      {% for status in ['In stock', 'Low stock', 'Reserved', 'Ordered', 'Retired'] %}
+                      <option {% if (item['status'] or 'In stock') == status %}selected{% endif %}>{{ status }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="field notes-field">
+                    <label>Notes</label>
+                    <textarea name="notes">{{ item['notes'] or '' }}</textarea>
+                  </div>
+                </div>
+                <div class="item-actions">
+                  <button class="btn btn-primary" type="submit">Save Changes</button>
+                </div>
+              </form>
+              <form class="item-actions" method="post" action="/inventory/delete" onsubmit="return confirm('Delete {{ item['item_name'] }}?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                <input type="hidden" name="item_id" value="{{ item['id'] }}"/>
+                <button class="btn btn-danger" type="submit">Delete Item</button>
+              </form>
+            </section>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">No inventory items yet. Add the first item from the form on this page.</div>
+          {% endif %}
+        </div>
+      </article>
     </section>
   </main>
-
-  <script>
-    const buttons = Array.from(document.querySelectorAll('[data-view]'));
-    const quickButtons = Array.from(document.querySelectorAll('[data-open-view]'));
-    const views = Array.from(document.querySelectorAll('.view'));
-
-    function openView(id) {
-      views.forEach((view) => view.classList.toggle('active', view.id === id));
-      buttons.forEach((button) => button.classList.toggle('active', button.dataset.view === id));
-    }
-
-    buttons.forEach((button) => {
-      button.addEventListener('click', () => openView(button.dataset.view));
-    });
-
-    quickButtons.forEach((button) => {
-      button.addEventListener('click', () => openView(button.dataset.openView));
-    });
-  </script>
+  <script src="/static/app.js"></script>
 </body>
 </html>

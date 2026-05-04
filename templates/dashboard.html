@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="csrf-token" content="{{ csrf_token }}"/>
-  <title>Security Center</title>
+  <title>Settings</title>
   <link rel="stylesheet" href="/static/theme.css"/>
 </head>
 <body class="app-shell">
@@ -12,13 +12,13 @@
     <section class="app-grid">
       <article class="hero-card">
         <div class="hero-inner">
-          <div class="eyebrow">Authenticated Session</div>
-          <h1 class="hero-title">Welcome, {{ username }}</h1>
-          <p class="hero-copy">Your primary sign-in is complete. Finish all three methods in this session to unlock the final authenticated experience page.</p>
+          <div class="eyebrow">Account Settings</div>
+          <h1 class="hero-title">Security settings for {{ username }}</h1>
+          <p class="hero-copy">Manage the extra authentication methods available for your account.</p>
           <div class="feature-stack">
             <div class="feature-chip">Current method count: {{ auth_progress.count }} / 3</div>
-            <div class="feature-chip">{% if auth_progress.is_complete %}All three methods are complete.{% else %}Add the remaining verified methods below to reach the final screen.{% endif %}</div>
-            <div class="feature-chip">Use password login, TOTP, and WebAuthn authenticators to complete the full flow.</div>
+            <div class="feature-chip">{% if auth_progress.is_complete %}All three methods have been verified in this session.{% else %}Password login is active; add or verify extra methods here when needed.{% endif %}</div>
+            <div class="feature-chip">TOTP and WebAuthn are managed from settings, while inventory stays in the protected workspace.</div>
           </div>
         </div>
       </article>
@@ -27,8 +27,8 @@
         <div class="panel-inner">
           <div class="topbar">
             <div class="title-block">
-              <h2>Security Center</h2>
-              <p>Use the controls below to complete extra factors or jump into the final destination if you already have three verified methods.</p>
+              <h2>Settings</h2>
+              <p>Review and manage the account's 3-factor authentication setup.</p>
             </div>
             <form method="post" action="/logout">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -43,9 +43,9 @@
               <p class="muted">Unique methods recorded in the current session.</p>
             </div>
             <div class="option-card">
-              <div class="metric-label">Final Access</div>
-              <div class="metric-value">{% if auth_progress.is_complete %}Ready{% else %}Locked{% endif %}</div>
-              <p class="muted">Three methods are required before the final page opens.</p>
+              <div class="metric-label">Inventory Access</div>
+              <div class="metric-value">Ready</div>
+              <p class="muted">The inventory page is available after normal sign-in.</p>
             </div>
             <div class="option-card">
               <div class="metric-label">Methods</div>
@@ -72,15 +72,16 @@
           <div class="soft-panel tile spacer-top">
             <div class="topbar" style="margin-bottom:0;">
               <div class="title-block">
-                <h3>Final destination</h3>
-                <p>{% if auth_progress.is_complete %}All requirements are met. Open the polished post-authentication page now.{% else %}Complete password, TOTP, and WebAuthn first. The final page unlocks automatically once all three are verified in this session.{% endif %}</p>
+                <h3>Inventory Management</h3>
+                <p>Return to the protected inventory workspace for this user account.</p>
               </div>
-              <a href="/auth/success" class="btn btn-primary" {% if not auth_progress.is_complete %}style="pointer-events:none;opacity:0.55;"{% endif %}>Open Final Page</a>
+              <a href="/inventory" class="btn btn-primary">Open Inventory</a>
             </div>
           </div>
         </div>
       </section>
     </section>
   </main>
+  <script src="/static/app.js"></script>
 </body>
 </html>

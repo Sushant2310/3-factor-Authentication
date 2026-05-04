@@ -34,14 +34,19 @@
       font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(circle at 14% 18%, rgba(184, 100, 40, 0.2), transparent 24%),
-        radial-gradient(circle at 82% 14%, rgba(15, 118, 110, 0.16), transparent 22%),
-        radial-gradient(circle at 84% 80%, rgba(19, 37, 52, 0.12), transparent 24%),
-        linear-gradient(145deg, #faf6ef 0%, #efe4d3 44%, #e8dccb 100%);
+        radial-gradient(circle at 14% 18%, rgba(184, 100, 40, 0.22), transparent 24%),
+        radial-gradient(circle at 82% 14%, rgba(15, 118, 110, 0.2), transparent 22%),
+        radial-gradient(circle at 84% 80%, rgba(19, 37, 52, 0.14), transparent 24%),
+        radial-gradient(circle at 18% 82%, rgba(225, 29, 72, 0.18), transparent 24%),
+        radial-gradient(circle at 58% 22%, rgba(124, 58, 237, 0.14), transparent 22%),
+        linear-gradient(145deg, #faf6ef 0%, #efe4d3 20%, #e6efe8 40%, #efe2f6 65%, #e8dccb 100%);
+      background-size: 160% 160%, 160% 160%, 160% 160%, 180% 180%, 180% 180%, 220% 220%;
+      background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%, 50% 0%, 0% 50%;
       padding: 28px;
       overflow-x: hidden;
       position: relative;
       transition: background 0.3s ease;
+      animation: loginSpectrum 26s ease-in-out infinite;
     }
 
     body::before,
@@ -79,10 +84,14 @@
 
     body[data-scene="ready"] {
       background:
-        radial-gradient(circle at 14% 18%, rgba(184, 100, 40, 0.14), transparent 24%),
-        radial-gradient(circle at 82% 14%, rgba(15, 118, 110, 0.22), transparent 22%),
-        radial-gradient(circle at 84% 80%, rgba(19, 37, 52, 0.14), transparent 24%),
-        linear-gradient(145deg, #f8f7f1 0%, #e7efe9 44%, #dfe7e1 100%);
+        radial-gradient(circle at 14% 18%, rgba(184, 100, 40, 0.18), transparent 24%),
+        radial-gradient(circle at 82% 14%, rgba(15, 118, 110, 0.24), transparent 22%),
+        radial-gradient(circle at 84% 80%, rgba(19, 37, 52, 0.16), transparent 24%),
+        radial-gradient(circle at 18% 82%, rgba(225, 29, 72, 0.16), transparent 24%),
+        radial-gradient(circle at 58% 22%, rgba(124, 58, 237, 0.16), transparent 22%),
+        linear-gradient(145deg, #f8f7f1 0%, #e7efe9 20%, #ece7f8 44%, #f5e6df 72%, #dfe7e1 100%);
+      background-size: 160% 160%, 160% 160%, 160% 160%, 180% 180%, 180% 180%, 220% 220%;
+      background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%, 50% 0%, 0% 50%;
     }
 
     .scene {
@@ -386,6 +395,8 @@
       border: 1px solid rgba(166, 27, 27, 0.12);
       font-weight: 700;
       line-height: 1.5;
+      box-shadow: 0 18px 34px rgba(166, 27, 27, 0.12);
+      animation: errorPop 0.28s ease both;
     }
 
     .helper {
@@ -460,6 +471,12 @@
       border-color: rgba(15, 118, 110, 0.38);
       box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
       transform: translateY(-1px);
+    }
+
+    .field-input.input-error {
+      border-color: rgba(166, 27, 27, 0.58);
+      box-shadow: 0 0 0 4px rgba(166, 27, 27, 0.12);
+      animation: errorShake 0.24s ease;
     }
 
     .field-input::placeholder {
@@ -645,6 +662,67 @@
         font-size: 2.7rem;
       }
     }
+
+    .hero, .form-shell { animation: panelIn 0.65s ease both; }
+    .form-shell { animation-delay: 0.08s; }
+    .visual-panel, .factor-card, .status-row {
+      transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    }
+    .visual-panel:hover, .factor-card:hover, .status-row:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.13);
+    }
+    .hero-pill { animation: pillBreathe 3.8s ease-in-out infinite; animation-delay: calc(var(--pill-index, 0) * 160ms); }
+    #pillAccount { --pill-index: 0; }
+    #pillPassword { --pill-index: 1; }
+    #pillTotp { --pill-index: 2; }
+    #pillFido { --pill-index: 3; }
+    .signal-dot { animation: liveBlink 1.4s ease-in-out infinite; }
+    .btn-primary, .login-btn { box-shadow: 0 16px 30px rgba(15, 118, 110, 0.2); }
+    .form-shell:focus-within { box-shadow: 0 38px 82px rgba(15, 24, 32, 0.2); }
+    @keyframes liveBlink {
+      0%, 100% { transform: scale(1); opacity: 0.78; }
+      50% { transform: scale(1.35); opacity: 1; }
+    }
+    @keyframes pillBreathe {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+    }
+    @keyframes loginSpectrum {
+      0% {
+        background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%, 50% 0%, 0% 50%;
+        filter: hue-rotate(0deg);
+      }
+      33% {
+        background-position: 18% 12%, 82% 24%, 74% 88%, 16% 72%, 72% 10%, 100% 50%;
+        filter: hue-rotate(105deg);
+      }
+      66% {
+        background-position: 100% 40%, 0% 18%, 26% 100%, 64% 28%, 22% 0%, 0% 50%;
+        filter: hue-rotate(220deg);
+      }
+      100% {
+        background-position: 0% 100%, 100% 100%, 0% 18%, 100% 0%, 52% 76%, 0% 50%;
+        filter: hue-rotate(360deg);
+      }
+    }
+    @keyframes errorPop {
+      from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes errorShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body data-scene="idle">
@@ -776,6 +854,7 @@
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
     const togglePassword = document.getElementById('togglePassword');
+    const message = document.getElementById('message');
     const helperBanner = document.getElementById('helperBanner');
     const usernameField = document.getElementById('usernameField');
     const passwordField = document.getElementById('passwordField');
@@ -805,6 +884,18 @@
     function showHelper(text) {
       helperBanner.textContent = text;
       helperBanner.classList.add('visible');
+    }
+
+    function showLoginError(text) {
+      message.innerHTML = `<div class="alert" role="alert">${text}</div>`;
+      usernameInput.classList.add('input-error');
+      passwordInput.classList.add('input-error');
+      passwordInput.value = '';
+      passwordInput.focus();
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Continue to Security Center';
+      showHelper('Login failed. Check the account details before trying again.');
+      updateScene();
     }
 
     function setFieldState(active = '') {
@@ -911,8 +1002,14 @@
       setFieldState('');
     });
 
-    usernameInput.addEventListener('input', updateScene);
-    passwordInput.addEventListener('input', updateScene);
+    usernameInput.addEventListener('input', () => {
+      usernameInput.classList.remove('input-error');
+      updateScene();
+    });
+    passwordInput.addEventListener('input', () => {
+      passwordInput.classList.remove('input-error');
+      updateScene();
+    });
 
     passwordInput.addEventListener('keyup', (event) => {
       if (event.getModifierState && event.getModifierState('CapsLock')) {
@@ -926,10 +1023,30 @@
       location.href = '/register';
     });
 
-    document.getElementById('loginForm').addEventListener('submit', () => {
+    document.getElementById('loginForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
       submitBtn.textContent = 'Checking credentials...';
       submitBtn.disabled = true;
       showHelper('Submitting the password step and preparing the protected route.');
+      message.innerHTML = '';
+
+      try {
+        const response = await window.threeFA.jsonFetch('/login', {
+          username: usernameInput.value,
+          password: passwordInput.value,
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          const errorText = result.error === 'too_many_attempts'
+            ? 'Too many failed attempts. Wait 15 minutes before trying again.'
+            : 'Invalid username or password.';
+          showLoginError(errorText);
+          return;
+        }
+        location.href = result.redirect || '/dashboard';
+      } catch (error) {
+        showLoginError('The server could not complete the login request. Try again.');
+      }
     });
 
     updateScene();

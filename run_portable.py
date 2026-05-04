@@ -58,7 +58,7 @@ def main() -> None:
     os.environ.setdefault("FASTAPI_ENV", "development")
     os.environ.setdefault("HOST", "localhost")
     os.environ.setdefault("PORT", "8000")
-    os.environ.setdefault("RELOAD", "false")
+    os.environ.setdefault("RELOAD", "true")
 
     ensure_dependencies()
     ensure_text_secret(SECRET_FILE, "SECRET_KEY")

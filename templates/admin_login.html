@@ -138,6 +138,35 @@
       .shell { grid-template-columns: 1fr; }
       .story, .card { padding: 28px 22px; }
     }
+
+    .shell { animation: panelIn 0.6s ease both; }
+    .story { position: relative; overflow: hidden; }
+    .story::after {
+      content: "";
+      position: absolute;
+      inset: auto -20% 20% -20%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.42), transparent);
+      animation: scanLine 3.2s ease-in-out infinite;
+    }
+    input, .btn { transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease; }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 14px 26px rgba(220, 38, 38, 0.24); }
+    @keyframes panelIn {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scanLine {
+      0%, 100% { transform: translateY(-36px); opacity: 0; }
+      50% { opacity: 1; }
+      100% { transform: translateY(120px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>

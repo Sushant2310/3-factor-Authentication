@@ -49,7 +49,7 @@
             </div>
             <div class="button-row spacer-top">
               <button id="verifyBtn" class="btn btn-primary" type="submit">Verify & Complete</button>
-              <a href="/dashboard" class="btn btn-soft">Back to Dashboard</a>
+              <a href="/settings" class="btn btn-soft">Back to Settings</a>
             </div>
           </form>
         </div>
@@ -59,6 +59,7 @@
   <script src="/static/app.js"></script>
   <script>
     const msg = document.getElementById('message');
+    const codeInput = document.getElementById('code');
 
     function showMessage(text, kind) {
       msg.textContent = text;
@@ -66,10 +67,23 @@
       msg.className = 'status-banner spacer-top ' + kind;
     }
 
+    function showOtpError(text) {
+      showMessage(text, 'error');
+      codeInput.classList.remove('input-error');
+      void codeInput.offsetWidth;
+      codeInput.classList.add('input-error');
+      codeInput.focus();
+      codeInput.select();
+    }
+
+    codeInput.addEventListener('input', () => {
+      codeInput.classList.remove('input-error');
+    });
+
     document.getElementById('verifyBtn').addEventListener('click', async () => {
-      const code = document.getElementById('code').value.trim();
+      const code = codeInput.value.trim();
       if (!code || code.length !== 6 || isNaN(code)) {
-        showMessage('Please enter a valid 6-digit code.', 'error');
+        showOtpError('Please enter a valid 6-digit code.');
         return;
       }
 
@@ -77,12 +91,13 @@
         const res = await window.threeFA.jsonFetch('/totp_setup', { code });
         const j = await res.json();
         if (!res.ok || !j.success) {
-          showMessage(j.message || j.detail || 'Verification failed.', 'error');
+          showOtpError(j.detail === 'Incorrect OTP' ? 'Incorrect OTP. Check your authenticator app and try again.' : (j.message || j.detail || 'Verification failed.'));
           return;
         }
         showMessage('TOTP verified. Redirecting...', 'success');
+        codeInput.classList.remove('input-error');
         setTimeout(() => {
-          location.href = j.redirect || '/dashboard';
+          location.href = j.redirect || '/settings';
         }, 900);
       } catch (e) {
         showMessage('Network error: ' + e.message, 'error');

@@ -22,6 +22,22 @@
           </form>
         </div>
 
+        {% if request.query_params.get('created_user') %}
+        <div class="status-banner spacer-top success">User created successfully.</div>
+        {% elif request.query_params.get('updated_user') %}
+        <div class="status-banner spacer-top success">User updated successfully.</div>
+        {% elif request.query_params.get('auth_reset') %}
+        <div class="status-banner spacer-top warning">User authentication methods were reset.</div>
+        {% elif request.query_params.get('error') == 'username_exists' %}
+        <div class="status-banner spacer-top error">This username has already been taken.</div>
+        {% elif request.query_params.get('error') == 'passwords_dont_match' %}
+        <div class="status-banner spacer-top error">Passwords do not match.</div>
+        {% elif request.query_params.get('error') == 'invalid_user_input' %}
+        <div class="status-banner spacer-top error">Enter a valid username and strong password.</div>
+        {% elif request.query_params.get('error') %}
+        <div class="status-banner spacer-top error">The user management action could not be completed.</div>
+        {% endif %}
+
         <div class="grid-three spacer-top">
           <div class="metric-card soft-panel">
             <div class="metric-label">Users</div>
@@ -35,6 +51,31 @@
             <div class="metric-label">Admin Scope</div>
             <div class="metric-value">Locked</div>
           </div>
+        </div>
+
+        <div class="soft-panel spacer-top admin-create-panel">
+          <div class="title-block">
+            <h2>Create User</h2>
+            <p>Add a user with a temporary password. They can set up authenticator methods after first login.</p>
+          </div>
+          <form class="admin-form-grid" method="post" action="/admin/create_user">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <div class="field">
+              <label for="newUsername">Username</label>
+              <input id="newUsername" name="username" type="text" autocomplete="off" required />
+            </div>
+            <div class="field">
+              <label for="newPassword">Temporary password</label>
+              <input id="newPassword" name="password" type="password" autocomplete="new-password" required />
+            </div>
+            <div class="field">
+              <label for="confirmNewPassword">Confirm password</label>
+              <input id="confirmNewPassword" name="confirm_password" type="password" autocomplete="new-password" required />
+            </div>
+            <div class="field action-field">
+              <button class="btn btn-primary" type="submit">Create User</button>
+            </div>
+          </form>
         </div>
 
         <div class="table-wrap spacer-top">
@@ -56,18 +97,30 @@
               {% for user in users %}
               <tr>
                 <td>{{ user['id'] }}</td>
-                <td>{{ user['username'] }}</td>
+                <td>
+                  <form class="inline-edit-form" method="post" action="/admin/update_user">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                    <input type="hidden" name="user_id" value="{{ user['id'] }}"/>
+                    <input name="username" type="text" value="{{ user['username'] }}" aria-label="Username for user {{ user['id'] }}" required />
+                    <button type="submit" class="btn btn-soft">Save</button>
+                  </form>
+                </td>
                 <td>
                   <div class="button-row">
-                    <form method="post" action="/admin/delete_user" onsubmit="return confirm('Delete user {{ user['username'] }}?')">
-                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-                      <input type="hidden" name="user_id" value="{{ user['id'] }}"/>
-                      <button type="submit" class="btn btn-danger">Delete</button>
-                    </form>
                     <form method="post" action="/admin/reset_password">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
                       <input type="hidden" name="user_id" value="{{ user['id'] }}"/>
                       <button type="submit" class="btn btn-soft">Reset Password</button>
+                    </form>
+                    <form method="post" action="/admin/reset_authenticators" onsubmit="return confirm('Reset authentication methods for {{ user['username'] }}?')">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                      <input type="hidden" name="user_id" value="{{ user['id'] }}"/>
+                      <button type="submit" class="btn btn-soft">Reset MFA</button>
+                    </form>
+                    <form method="post" action="/admin/delete_user" onsubmit="return confirm('Delete user {{ user['username'] }}?')">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                      <input type="hidden" name="user_id" value="{{ user['id'] }}"/>
+                      <button type="submit" class="btn btn-danger">Delete</button>
                     </form>
                   </div>
                 </td>
@@ -79,5 +132,6 @@
       </div>
     </section>
   </main>
+  <script src="/static/app.js"></script>
 </body>
 </html>
