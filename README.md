@@ -57,7 +57,7 @@ This project can be used as:
 ### Local Setup
 
 ```powershell
-cd $path
+cd $PATH
 python -m pip install -r requirements.txt
 python run_portable.py
 ```
@@ -65,7 +65,7 @@ python run_portable.py
 On macOS or Linux:
 
 ```bash
-cd /path/to/3fa
+cd $PATH
 python3 -m pip install -r requirements.txt
 python3 run_portable.py
 ```
